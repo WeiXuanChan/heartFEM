@@ -1,0 +1,188 @@
+.title LV full circuit
+
+.PARAM PI = 3.14159265359
+.PARAM heartperiod = <<cycle>>
+.PARAM activepeaktime  = <<timetopeaktension>>
+.PARAM freq1 = 1 / heartperiod
+.PARAM freq2 = 2 / heartperiod
+.PARAM freq3 = 3 / heartperiod
+.PARAM freq4 = 4 / heartperiod
+.PARAM trackrelaxphase = 0
+
+.func manmod(shorttime) {shorttime - floor(shorttime / heartperiod) * heartperiod}
+.func disfrompeak(xtime,peaktime,width) {min( abs( manmod(xtime) - peaktime) , heartperiod - abs( manmod(xtime) - peaktime))}
+.func cossq(xtime,amp,peaktime,width) {amp * cos( PI * disfrompeak( xtime , peaktime , width ) / width)^2}
+
+.model valve sidiode(Roff=10k Ron=1m Rrev=10 Vfwd=0.1 Vrev=1k Revepsilon=0.2 Epsilon=0.2)
+
+.subckt vein in out rval=100k lval=1n
+R1 1  out    r = rval
+L1 in 1    l = lval
+.ends vein
+
+Vlaprobe lagnd lagnd2 dc 0
+Vraprobe ragnd ragnd2 dc 0
+Vlvprobe lv    lvgnd  dc 0
+Vrvprobe rvgnd rvgnd2 dc 0
+
+Irvu1   rv       rvgnd   SIN(0 <<rvuamp1>> freq1 0 0 <<rvuphase1>>)
+*Irvu2   rv       rvgnd   SIN(0 <<rvuamp2>> freq2 0 0 <<rvuphase2>>)
+*Irvu3   rv       rvgnd   SIN(0 <<rvuamp3>> freq3 0 0 <<rvuphase3>>)
+*Irvu4   rv       rvgnd   SIN(0 <<rvuamp4>> freq4 0 0 <<rvuphase4>>)
+
+Cra    ra       ragnd   <<rac>> 
+Cla    la       lagnd   <<lac>> 
+
+alvu1 %v[lvgenerator] pwl_input
+.model pwl_input filesource (file="<<lvufile>>" amploffset=[0] amplscale=[1] timeoffset=0 timescale=1 timerelative=false amplstep=false)
+
+*Blvu2  lvgenerator gnd V = v(lvgenerator0) + v(lvgenerator1)
+*alvu20 gnd lvvol %v(lvgenerator0) lvutabmod0
+*.model lvutabmod0 table2d (offset=0.0 gain=1 order=3 file="<<lvutablebasefile>>")
+*alvu21 lvvol timecyclic %v(lvgenerator1) lvutabmod
+*alvu22 lvvol timecyclic2 %v(lvgenerator1) lvutabmod
+*.model lvutabmod table2d (offset=0.0 gain=1 order=3 file="<<lvutablefile>>")
+
+.if (trackrelaxphase == 1)
+Bestphase lvestphase gnd V = v(timecyclic)/activepeaktime
+Blvrisecurrent gnd lvcurrentphase I =  (v(isriseanalog)>0.5 ? (v(lvcurrentphase) >= 0.99 ? (1-v(lvcurrentphase))/0.01*v(lvrisetemp) : v(lvrisetemp) ) : 0)
+Blvrisetemp lvrisetemp gnd V = (v(lvcurrentphase) <= v(lvestphase) ? 1/activepeaktime : v(lvestphase)/activepeaktime/v(lvcurrentphase))
+Blvfallcurrent lvcurrentphase gnd I =  v(lvcurrentphase) <= 0.01 ? v(lvcurrentphase)/0.01*v(lvfalltemp) : v(lvfalltemp)
+Blvfalltemp lvfalltemp gnd V = v(isriseanalog)>0.5 ? (v(lvcurrentphase) <= v(lvestphase) ? 0 : (v(lvcurrentphase)-v(lvestphase))/v(lvtr)/v(lvcurrentphase)) : 1/v(lvtr)
+
+alvpressgrad  lvcurrentphase gnd lvtrcap
+.model lvtrcap capacitor (c=1 ic=0)
+alvtr gnd lvvol %v(lvtr) lvutabtrmod
+.model lvutabtrmod table2d (offset=0.0 gain=1 order=3 file="<<lvtrtablefile>>")
+Blvphase lvphase gnd V = max(0,min(1,v(lvcurrentphase)))
+Btime2 timecyclic2 gnd V =  activepeaktime + v(lvtr) * (1-v(lvphase))
+
+adgnd [0] [dgnd] adc_dgnd
+.model adc_dgnd adc_bridge(in_low = -2 in_high = -1)
+abridge [timecyclic] [start0] adc1
+.model adc1 adc_bridge(in_low = 1m in_high = 1.000001m)
+ainvert start0 rise0 inv1
+.model inv1 d_inverter(rise_delay = 0.5e-9 fall_delay = 0.3e-9 input_load = 0.5e-12)
+abridge2 [lvcurrentphase] [fall0] adc_buff2
+.model adc_buff2 adc_bridge(in_low = 0.999999998 in_high = 0.999999999)
+alvcontract dgnd dgnd dgnd rise0 fall0 isrise isfall setresetflop
+.model setresetflop d_srff(clk_delay = 13.0e-9 set_delay = 25.0e-9 reset_delay = 27.0e-9 ic = 0 rise_delay = 10.0e-9 fall_delay = 3e-9)
+abridge1 [isrise] [isriseanalog] dac1
+.model dac1 dac_bridge(out_low = 0 out_high = 1 out_undef = 0 input_load = 5.0e-12 t_rise = 50e-9 t_fall = 20e-9)
+.endif
+
+Etime timecyclic gnd vol = 'manmod(TIME)'
+
+Blavol  lavol gnd I = -i(Vlaprobe) 
+alavolconvert  lavol gnd lavolconvertcap
+.model lavolconvertcap capacitor (c=1 ic=<<lainitvol>>)
+
+Bravol  ravol gnd I = -i(Vraprobe) 
+aravolconvert  ravol gnd ravolconvertcap
+.model ravolconvertcap capacitor (c=1 ic=<<rainitvol>>)
+
+Blvvol  lvvol gnd I = -i(Vlvprobe) 
+alvvolconvert  lvvol gnd lvvolconvertcap
+.model lvvolconvertcap capacitor (c=1 ic=<<lvinitvol>>)
+
+Brvvol  rvvol gnd I = -i(Vrvprobe) 
+arvvolconvert  rvvol gnd rvvolconvertcap
+.model rvvolconvertcap capacitor (c=1 ic=<<rvinitvol>>)
+
+Blvu   lvgnd  gnd     <<lvinputvar>> = v(lvgenerator)
+Ervu   rvgnd2  gnd     vol = 'v(rv)'
+
+Elau   lagnd2  gnd     vol = 'cossq( TIME ,<<laamp>>,<<lapeaktime>>,<<lawidth>>)'
+Erau   ragnd2  gnd     vol = 'cossq( TIME ,<<raamp>>,<<rapeaktime>>,<<rawidth>>)'
+
+Xlalavalv  la  lavalvp1    vein  rval=<<lalavalvr>>    lval=<<lalavalvl>>    kval=<<lalavalvk>>    betaval=<<lalavalvb>>
+Vlalavalv  lavalvp1 lavalvp2 dc 0
+Blalavalv  lavalvp2 lavalv V=' <<lalavalvk>> * ( i(Vlalavalv) ^2 )^( <<lalavalvb>> / 2) * sgn( i(Vlalavalv) ) '
+Xlvlvvalv  lv  lvvalvp1    vein  rval=<<lvlvvalvr>>    lval=<<lvlvvalvl>>    kval=<<lvlvvalvk>>    betaval=<<lvlvvalvb>>
+Vlvlvvalv  lvvalvp1 lvvalvp2 dc 0
+Blvlvvalv  lvvalvp2 lvvalv V=' <<lvlvvalvk>> * ( i(Vlvlvvalv) ^2 )^( <<lvlvvalvb>> / 2) * sgn( i(Vlvlvvalv) ) '
+Xraravalv  ra  ravalvp1    vein  rval=<<raravalvr>>    lval=<<raravalvl>>    kval=<<raravalvk>>    betaval=<<raravalvb>>
+Vraravalv  ravalvp1 ravalvp2 dc 0
+Braravalv  ravalvp2 ravalv V=' <<raravalvk>> * ( i(Vraravalv) ^2 )^( <<raravalvb>> / 2) * sgn( i(Vraravalv) ) '
+Xrvrvvalv  rv  rvvalvp1    vein  rval=<<rvrvvalvr>>    lval=<<rvrvvalvl>>    kval=<<rvrvvalvk>>    betaval=<<rvrvvalvb>>
+Vrvrvvalv  rvvalvp1 rvvalvp2 dc 0
+Brvrvvalv  rvvalvp2 rvvalv V=' <<rvrvvalvk>> * ( i(Vrvrvvalv) ^2 )^( <<rvrvvalvb>> / 2) * sgn( i(Vrvrvvalv) ) '
+
+
+alv   lvvalv   aa    valve
+ala   lavalv   lv    valve
+arv   rvvalv   pa1   valve
+ara   ravalv   rv    valve
+afo   fovalv   la    valve
+
+Caa   aa    gnd    <<aac>>    
+Cao1  ao1   gnd    <<ao1c>>   
+Cao2  ao2   gnd    <<ao2c>>   
+Cao3  ao3   gnd    <<ao3c>>   
+Cao4  ao4   gnd    <<ao4c>>   
+Cbr   br    gnd    <<brc>>    
+Cca   ca    gnd    <<cac>>    
+Cub   ub    gnd    <<ubc>>    
+Che   he    gnd    <<hec>>    
+Cinte inte  gnd    <<intec>> 
+Civc  ivc   gnd    <<ivcc>>   
+Ckid  kid   gnd    <<kidc>>  
+Cleg  leg   gnd    <<legc>>   
+Clung lung  gnd    <<lungc>>  
+Cpa1  pa1   gnd    <<pa1c>>   
+Cpa2  pa2   gnd    <<pa2c>>   
+Cplac plac  gnd    <<placc>>  
+Csvc  svc   gnd    <<svcc>>  
+Cuv   uv    gnd    <<uvc>>   
+
+Xcabr     ca    br     vein  rval=<<cabrr>>     lval=<<cabrl>>     kval=<<cabrk>>     betaval=<<cabrb>>
+Xbrsvc    br    svc    vein  rval=<<brsvcr>>    lval=<<brsvcl>>    kval=<<brsvck>>    betaval=<<brsvcb>>
+Xubsvc    ub    svc    vein  rval=<<ubsvcr>>    lval=<<ubsvcl>>    kval=<<ubsvck>>    betaval=<<ubsvcb>>
+Xao1ca    ao1   ca     vein  rval=<<ao1car>>    lval=<<ao1cal>>    kval=<<ao1cak>>    betaval=<<ao1cab>>
+Xao1ub    ao1   ub     vein  rval=<<ao1ubr>>    lval=<<ao1ubl>>    kval=<<ao1ubk>>    betaval=<<ao1ubb>>
+Xsvcra    svc   ra     vein  rval=<<svcrar>>    lval=<<svcral>>    kval=<<svcrak>>    betaval=<<svcrab>>
+Xpa1pa2   pa1   pa2    vein  rval=<<pa1pa2r>>   lval=<<pa1pa2l>>   kval=<<pa1pa2k>>   betaval=<<pa1pa2b>>
+Xpa2lung  pa2   lung   vein  rval=<<pa2lungr>>  lval=<<pa2lungl>>  kval=<<pa2lungk>>  betaval=<<pa2lungb>>
+Xlungla   lung  la     vein  rval=<<lunglar>>   lval=<<lunglal>>   kval=<<lunglak>>   betaval=<<lunglab>>
+Xaaao1    aa    ao1    vein  rval=<<aaao1r>>    lval=<<aaao1l>>    kval=<<aaao1k>>    betaval=<<aaao1b>>
+Xao1ao2   ao1   ao2    vein  rval=<<ao1ao2r>>   lval=<<ao1ao2l>>   kval=<<ao1ao2k>>   betaval=<<ao1ao2b>>
+Xao2ao3   ao2   ao3    vein  rval=<<ao2ao3r>>   lval=<<ao2ao3l>>   kval=<<ao2ao3k>>   betaval=<<ao2ao3b>>
+Xao3ao4   ao3   ao4    vein  rval=<<ao3ao4r>>   lval=<<ao3ao4l>>   kval=<<ao3ao4k>>   betaval=<<ao3ao4b>>
+Xao3kid   ao3   kid    vein  rval=<<ao3kidr>>   lval=<<ao3kidl>>   kval=<<ao3kidk>>   betaval=<<ao3kidb>>
+Xao3he    ao3   he     vein  rval=<<ao3her>>    lval=<<ao3hel>>    kval=<<ao3hek>>    betaval=<<ao3heb>>
+Xao3inte  ao3   inte   vein  rval=<<ao3inter>>  lval=<<ao3intel>>  kval=<<ao3intek>>  betaval=<<ao3inteb>>
+Xao4leg   ao4   leg    vein  rval=<<ao4legr>>   lval=<<ao4legl>>   kval=<<ao4legk>>   betaval=<<ao4legb>>
+Xao4plac  ao4   plac   vein  rval=<<ao4placr>>  lval=<<ao4placl>>  kval=<<ao4plack>>  betaval=<<ao4placb>>
+Xkidivc   kid   ivc    vein  rval=<<kidivcr>>   lval=<<kidivcl>>   kval=<<kidivck>>   betaval=<<kidivcb>>
+Xintehe   inte  he     vein  rval=<<inteher>>   lval=<<intehel>>   kval=<<intehek>>   betaval=<<inteheb>>
+Xlegivc   leg   ivc    vein  rval=<<legivcr>>   lval=<<legivcl>>   kval=<<legivck>>   betaval=<<legivcb>>
+Xplacuv   plac  uv     vein  rval=<<placuvr>>   lval=<<placuvl>>   kval=<<placuvk>>   betaval=<<placuvb>>
+Xuvhe     uv    he     vein  rval=<<uvher>>     lval=<<uvhel>>     kval=<<uvhek>>     betaval=<<uvheb>>
+Xheivc    he    ivc    vein  rval=<<heivcr>>    lval=<<heivcl>>    kval=<<heivck>>    betaval=<<heivcb>>
+Xivcra    ivc   ra     vein  rval=<<ivcrar>>    lval=<<ivcral>>    kval=<<ivcrak>>    betaval=<<ivcrab>>
+
+Xda       pa2   ao2p1    vein  rval=<<dar>>    lval=<<dal>>    kval=<<dak>>    betaval=<<dab>>
+Vda  ao2p1 ao2p2 dc 0
+Bda  ao2p2 ao2 V=' <<dak>> * ( i(Vda) ^2 )^( <<dab>> / 2) * sgn( i(Vda) ) '
+Xdv       uv    ivcp1    vein  rval=<<dvr>>    lval=<<dvl>>    kval=<<dvk>>    betaval=<<dvb>>
+Vdv  ivcp1 ivcp2 dc 0
+Bdv  ivcp2 ivc V=' <<dvk>> * ( i(Vdv) ^2 )^( <<dvb>> / 2) * sgn( i(Vdv) ) '
+Xfo       ivc   fovalvp1 vein  rval=<<for>>    lval=<<fol>>    kval=<<fok>>    betaval=<<fob>>
+Vfo  fovalvp1 fovalvp2 dc 0
+Bfo  fovalvp2 fovalv V=' <<fok>> * ( i(Vfo) ^2 )^( <<fob>> / 2) * sgn( i(Vfo) ) '
+
+.options savecurrents
+
+.ic v(la)= <<vla0>> v(ra)= <<vra0>>
+.tran <<stepTime>> <<stopTime>>
+*.print tran v(lv) i(Vlvprobe)
+
+
+.control
+set controlswait
+set filetype=ascii
+set wr_vecnames
+run
+wrdata <<outfile>> v(lv) v(lvvol) v(la) v(rv) v(ra) v(pa1) v(aa) i(Vlvprobe)
+.endc 
+.end

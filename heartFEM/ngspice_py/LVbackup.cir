@@ -1,0 +1,130 @@
+.title LV full circuit
+
+.PARAM PI = 3.14159265359
+.PARAM heartperiod = <<cycle>>
+.PARAM freq1 = 1 / heartperiod
+.PARAM freq2 = 2 / heartperiod
+.PARAM freq3 = 3 / heartperiod
+.PARAM freq4 = 4 / heartperiod
+
+.func manmod(shorttime) {shorttime - floor(shorttime / heartperiod) * heartperiod}
+.func disfrompeak(xtime,peaktime,width) {min( abs( manmod(xtime) - peaktime) , heartperiod - abs( manmod(xtime) - peaktime))}
+.func cossq(xtime,amp,peaktime,width) {amp * cos( PI * disfrompeak( xtime , peaktime , width ) / width)^2}
+
+.model valve sidiode(Roff=10k Ron=1m Rrev=10 Vfwd=0.1 Vrev=1k Revepsilon=0.2 Epsilon=0.2)
+
+.subckt vein in out rval=100k lval=1n kval=1k betaval=2
+.if (kval == 0)
+Vl 2  out    dc 0
+.elseif (betaval == 0)
+Vl 2  out    dc kval
+.else
+B1 2  out  I=' ( abs( (v(out) - v(in)) / kval )^ ( 1 / betaval ) ) * sgn( (v(out) - v(in)) ) '
+*Vl 2  out    dc 0
+.endif
+R1 1  2    r = rval
+L1 in 1    l = lval
+.ends vein
+
+Vlvprobe lv lvgnd dc 0
+
+Irvu1   rv       rvgnd   SIN(0 <<rvuamp1>> freq1 0 0 <<rvuphase1>>)
+*Irvu2   rv       rvgnd   SIN(0 <<rvuamp2>> freq2 0 0 <<rvuphase2>>)
+*Irvu3   rv       rvgnd   SIN(0 <<rvuamp3>> freq3 0 0 <<rvuphase3>>)
+*Irvu4   rv       rvgnd   SIN(0 <<rvuamp4>> freq4 0 0 <<rvuphase4>>)
+
+Cra    ra       ragnd   <<rac>> 
+Cla    la       lagnd   <<lac>> 
+
+alvu %<<lvinputvar>>[lvgnd] pwl_input
+.model pwl_input filesource (file="<<lvufile>>"
++ amploffset=[0] 
++ amplscale=[1] 
++ timeoffset=0 
++ timescale=1 
++ timerelative=false 
++ amplstep=false)
+
+*Blvu   lvgnd  gnd     <<lvinputvar>> = pwl(time, <<lvutable>> )
+Ervu   rvgnd  gnd     vol = 'v(rv)'
+
+Elau   lagnd  gnd     vol = 'cossq( TIME ,<<laamp>>,<<lapeaktime>>,<<lawidth>>)'
+Erau   ragnd  gnd     vol = 'cossq( TIME ,<<raamp>>,<<rapeaktime>>,<<rawidth>>)'
+
+Xlalavalv  la  lavalv    vein  rval=<<lalavalvr>>    lval=<<lalavalvl>>    kval=<<lalavalvk>>    betaval=<<lalavalvb>>
+Xlvlvvalv  lv  lvvalv    vein  rval=<<lvlvvalvr>>    lval=<<lvlvvalvl>>    kval=<<lvlvvalvk>>    betaval=<<lvlvvalvb>>
+Xraravalv  ra  ravalv    vein  rval=<<raravalvr>>    lval=<<raravalvl>>    kval=<<raravalvk>>    betaval=<<raravalvb>>
+Xrvrvvalv  rv  rvvalv    vein  rval=<<rvrvvalvr>>    lval=<<rvrvvalvl>>    kval=<<rvrvvalvk>>    betaval=<<rvrvvalvb>>
+
+
+alv   lvvlav   aa    valve
+ala   lavalv   lv    valve
+arv   rvvalv   pa1   valve
+ara   ravalv   rv    valve
+afo   fovalv   la    valve
+
+Caa   aa    gnd    <<aac>>    
+Cao1  ao1   gnd    <<ao1c>>   
+Cao2  ao2   gnd    <<ao2c>>   
+Cao3  ao3   gnd    <<ao3c>>   
+Cao4  ao4   gnd    <<ao4c>>   
+Cbr   br    gnd    <<brc>>    
+Cca   ca    gnd    <<cac>>    
+Cub   ub    gnd    <<ubc>>    
+Che   he    gnd    <<hec>>    
+Cinte inte  gnd    <<intec>> 
+Civc  ivc   gnd    <<ivcc>>   
+Ckid  kid   gnd    <<kidc>>  
+Cleg  leg   gnd    <<legc>>   
+Clung lung  gnd    <<lungc>>  
+Cpa1  pa1   gnd    <<pa1c>>   
+Cpa2  pa2   gnd    <<pa2c>>   
+Cplac plac  gnd    <<placc>>  
+Csvc  svc   gnd    <<svcc>>  
+Cuv   uv    gnd    <<uvc>>   
+
+Xcabr     ca    br     vein  rval=<<cabrr>>     lval=<<cabrl>>     kval=<<cabrk>>     betaval=<<cabrb>>
+Xbrsvc    br    svc    vein  rval=<<brsvcr>>    lval=<<brsvcl>>    kval=<<brsvck>>    betaval=<<brsvcb>>
+Xubsvc    ub    svc    vein  rval=<<ubsvcr>>    lval=<<ubsvcl>>    kval=<<ubsvck>>    betaval=<<ubsvcb>>
+Xao1ca    ao1   ca     vein  rval=<<ao1car>>    lval=<<ao1cal>>    kval=<<ao1cak>>    betaval=<<ao1cab>>
+Xao1ub    ao1   ub     vein  rval=<<ao1ubr>>    lval=<<ao1ubl>>    kval=<<ao1ubk>>    betaval=<<ao1ubb>>
+Xsvcra    svc   ra     vein  rval=<<svcrar>>    lval=<<svcral>>    kval=<<svcrak>>    betaval=<<svcrab>>
+Xpa1pa2   pa1   pa2    vein  rval=<<pa1pa2r>>   lval=<<pa1pa2l>>   kval=<<pa1pa2k>>   betaval=<<pa1pa2b>>
+Xpa2lung  pa2   lung   vein  rval=<<pa2lungr>>  lval=<<pa2lungl>>  kval=<<pa2lungk>>  betaval=<<pa2lungb>>
+Xlungla   lung  la     vein  rval=<<lunglar>>   lval=<<lunglal>>   kval=<<lunglak>>   betaval=<<lunglab>>
+Xaaao1    aa    ao1    vein  rval=<<aaao1r>>    lval=<<aaao1l>>    kval=<<aaao1k>>    betaval=<<aaao1b>>
+Xao1ao2   ao1   ao2    vein  rval=<<ao1ao2r>>   lval=<<ao1ao2l>>   kval=<<ao1ao2k>>   betaval=<<ao1ao2b>>
+Xao2ao3   ao2   ao3    vein  rval=<<ao2ao3r>>   lval=<<ao2ao3l>>   kval=<<ao2ao3k>>   betaval=<<ao2ao3b>>
+Xao3ao4   ao3   ao4    vein  rval=<<ao3ao4r>>   lval=<<ao3ao4l>>   kval=<<ao3ao4k>>   betaval=<<ao3ao4b>>
+Xao3kid   ao3   kid    vein  rval=<<ao3kidr>>   lval=<<ao3kidl>>   kval=<<ao3kidk>>   betaval=<<ao3kidb>>
+Xao3he    ao3   he     vein  rval=<<ao3her>>    lval=<<ao3hel>>    kval=<<ao3hek>>    betaval=<<ao3heb>>
+Xao3inte  ao3   inte   vein  rval=<<ao3inter>>  lval=<<ao3intel>>  kval=<<ao3intek>>  betaval=<<ao3inteb>>
+Xao4leg   ao4   leg    vein  rval=<<ao4legr>>   lval=<<ao4legl>>   kval=<<ao4legk>>   betaval=<<ao4legb>>
+Xao4plac  ao4   plac   vein  rval=<<ao4placr>>  lval=<<ao4placl>>  kval=<<ao4plack>>  betaval=<<ao4placb>>
+Xkidivc   kid   ivc    vein  rval=<<kidivcr>>   lval=<<kidivcl>>   kval=<<kidivck>>   betaval=<<kidivcb>>
+Xintehe   inte  he     vein  rval=<<inteher>>   lval=<<intehel>>   kval=<<intehek>>   betaval=<<inteheb>>
+Xlegivc   leg   ivc    vein  rval=<<legivcr>>   lval=<<legivcl>>   kval=<<legivck>>   betaval=<<legivcb>>
+Xplacuv   plac  uv     vein  rval=<<placuvr>>   lval=<<placuvl>>   kval=<<placuvk>>   betaval=<<placuvb>>
+Xuvhe     uv    he     vein  rval=<<uvher>>     lval=<<uvhel>>     kval=<<uvhek>>     betaval=<<uvheb>>
+Xheivc    he    ivc    vein  rval=<<heivcr>>    lval=<<heivcl>>    kval=<<heivck>>    betaval=<<heivcb>>
+Xivcra    ivc   ra     vein  rval=<<ivcrar>>    lval=<<ivcral>>    kval=<<ivcrak>>    betaval=<<ivcrab>>
+
+Xda       pa2   ao2    vein  rval=<<dar>>    lval=<<dal>>    kval=<<dak>>    betaval=<<dab>>
+Xdv       uv    ivc    vein  rval=<<dvr>>    lval=<<dvl>>    kval=<<dvk>>    betaval=<<dvb>>
+Xfo       ivc   fovalv vein  rval=<<for>>    lval=<<fol>>    kval=<<fok>>    betaval=<<fob>>
+
+.options savecurrents
+
+.ic v(la)=cossq( <<lawidth>> /2, <<laamp>> , <<lapeaktime>> , <<lawidth>> ) v(ra)=cossq( <<rawidth>>/2,<<raamp>>,<<rapeaktime>>,<<rawidth>>)
+.tran <<stepTime>> <<stopTime>>
+*.print tran v(lv) i(Vlvprobe)
+
+
+.control
+set controlswait
+set filetype=ascii
+set wr_vecnames
+run
+wrdata <<outfile>> v(lv) v(la) v(rv) v(ra) v(pa1) v(aa) i(Vlvprobe)
+.endc 
+.end
