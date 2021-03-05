@@ -1,7 +1,7 @@
 from setuptools import setup
 setup(
   name = 'heartFEM',         # How you named your package folder (MyLib)
-  packages = ['heartFEM'],   # Chose the same as "name"
+  packages = ['heartFEM'],   
   version = '2.0.0',      # Start with a small number and increase it with every change you make
   license='MIT',        # Chose a license from here: https://help.github.com/articles/licensing-a-repository
   description = 'Optimization of patient specific heart model with myocardium FEM and cardiovascular network Windkessel.',   # Give a short description about your library
@@ -10,7 +10,7 @@ setup(
   url = 'https://github.com/WeiXuanChan/heartFEM',   # Provide either the link to your github or to your website
   download_url = 'https://github.com/WeiXuanChan/heartFEM/archive/v2.0.0.tar.gz',    
   keywords = ['medical', 'cardiac'],   # Keywords that define your package best
-  install_requires=['numpy','matplotlib','scipy'],
+  install_requires=['numpy','matplotlib','scipy','heart_ngspice'],
   extras_require = {
         'fem analysis software':  ['fenics'],
         'circuit analysis':  ['ngspice'],
