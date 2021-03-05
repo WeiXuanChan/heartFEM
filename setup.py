@@ -12,9 +12,9 @@ setup(
   keywords = ['medical', 'cardiac'],   # Keywords that define your package best
   install_requires=['numpy','matplotlib','scipy'],
   extras_require = {
-        'fem analysis software':  ['fenics']
-        'circuit analysis':  ['ngspice']
-        'equation setup for heart':  ['lcleeHeart']
+        'fem analysis software':  ['fenics'],
+        'circuit analysis':  ['ngspice'],
+        'equation setup for heart':  ['lcleeHeart'],
         'data storage and processing':  ['vtk']
   },
   classifiers=[
