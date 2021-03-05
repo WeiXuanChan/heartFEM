@@ -1,7 +1,6 @@
 import sys
 
 import os as os
-sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 #import shutil
 try:
     import dolfin as fenics
@@ -17,7 +16,7 @@ import math
 import csv
 
 import vtk
-import ngspice_py
+from heartFEM import ngspice_py
 from mpi4py import MPI as pyMPI
 
 import lcleeHeart.
