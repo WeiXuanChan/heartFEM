@@ -14,7 +14,7 @@ setup(
   url = 'https://github.com/WeiXuanChan/heartFEM',   # Provide either the link to your github or to your website
   download_url = 'https://github.com/WeiXuanChan/heartFEM/archive/v2.0.2.tar.gz',    
   keywords = ['medical', 'cardiac'],   # Keywords that define your package best
-  install_requires=['numpy','matplotlib','scipy','heart_ngspice'],
+  install_requires=['numpy','matplotlib','scipy'],
   extras_require = {
         'fem analysis software':  ['fenics'],
         'circuit analysis':  ['ngspice'],
