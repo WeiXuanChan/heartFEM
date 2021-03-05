@@ -1,7 +1,11 @@
 from setuptools import setup
 setup(
   name = 'heartFEM',         # How you named your package folder (MyLib)
-  packages = ['heartFEM'],   
+  packages = ['heartFEM'],  
+  include_package_data=True,   
+  package_data={
+        'ngspice_py':['*']
+        },
   version = '2.0.0',      # Start with a small number and increase it with every change you make
   license='MIT',        # Chose a license from here: https://help.github.com/articles/licensing-a-repository
   description = 'Optimization of patient specific heart model with myocardium FEM and cardiovascular network Windkessel.',   # Give a short description about your library
