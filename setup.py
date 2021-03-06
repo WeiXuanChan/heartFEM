@@ -6,13 +6,13 @@ setup(
   package_data={
         'ngspice_py':['*']
         },
-  version = '2.0.3',      # Start with a small number and increase it with every change you make
+  version = '2.0.4',      # Start with a small number and increase it with every change you make
   license='MIT',        # Chose a license from here: https://help.github.com/articles/licensing-a-repository
   description = 'Optimization of patient specific heart model with myocardium FEM and cardiovascular network Windkessel.',   # Give a short description about your library
   author = 'Wei Xuan Chan',                   # Type in your name
   author_email = 'w.x.chan1986@gmail.com',      # Type in your E-Mail
   url = 'https://github.com/WeiXuanChan/heartFEM',   # Provide either the link to your github or to your website
-  download_url = 'https://github.com/WeiXuanChan/heartFEM/archive/v2.0.3.tar.gz',    
+  download_url = 'https://github.com/WeiXuanChan/heartFEM/archive/v2.0.4.tar.gz',    
   keywords = ['medical', 'cardiac'],   # Keywords that define your package best
   install_requires=['numpy','matplotlib','scipy'],
   extras_require = {
