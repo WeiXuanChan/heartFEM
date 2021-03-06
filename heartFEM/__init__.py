@@ -462,10 +462,11 @@ class LVclosed:
     def getLVbehavior(self,runParameters=None,volstep=50,extendVol=0.1,minESV=None,maxEDV=None,saveaddstr='',voladj=0.1,starttime=0,endtime=None):
         if runParameters is None:
             runParameters=self.defaultParameters
-        solver,uflforms,activeforms,t_a,dt,Cavityvol,f0,mesh_volume,mesh,comm=lcleeHeart..setupHeart(self.casename,self.meshname,runParameters)
+        heart=lcleeHeart.setupHeart(self.casename,self.meshname,runParameters)
+        #solver,uflforms,activeforms,t_a,dt,Cavityvol,f0,mesh_volume,mesh,comm=lcleeHeart..setupHeart(self.casename,self.meshname,runParameters)
         
         ########################### Fenics's Newton  #########################################################
-        Cavityvol.vol = uflforms.cavityvol()
+        heart.Cavityvol.vol = heart.uflforms.cavityvol()
         
         # Closed loop cycle
         BCL = runParameters['BCL']
@@ -484,18 +485,18 @@ class LVclosed:
         volumeSpace=minESV*(maxEDV/minESV)**(np.linspace(0,1,num=volstep))[::-1]
         ####### Loading phase to MAX volume ####################################################
 
-        if Cavityvol.vol>(volumeSpace[0]):
+        if heart.Cavityvol.vol>(volumeSpace[0]):
         	tuneVol=-1
         else:
             tuneVol=1
-        while (Cavityvol.vol*tuneVol)<(volumeSpace[0]*tuneVol):
+        while (heart.Cavityvol.vol*tuneVol)<(volumeSpace[0]*tuneVol):
         	if (((1+tuneVol*voladj)*Cavityvol.vol)*tuneVol)<(volumeSpace[0]*tuneVol):
-        		Cavityvol.vol *= (1+tuneVol*voladj)
+        		heart.Cavityvol.vol *= (1+tuneVol*voladj)
         	else:
-        		Cavityvol.vol = volumeSpace[0]
-        	solver.solvenonlinear()
-        	p_cav = uflforms.cavitypressure()
-        	V_cav = uflforms.cavityvol()
+        		heart.Cavityvol.vol = volumeSpace[0]
+        	heart.solver.solvenonlinear()
+        	p_cav = heart.uflforms.cavitypressure()
+        	V_cav = heart.uflforms.cavityvol()
         	print ("PLV = ", p_cav*.0075, " VLV = ", V_cav)	
 
         timeSpace=[]
@@ -520,30 +521,30 @@ class LVclosed:
         press_volTime=np.zeros((len(volumeSpace),len(timeSpace)))
         maxtimeind=0
         for curr_volN in range(len(volumeSpace)):
-            t_a.t_a=timeSpace[0]
-            dt.dt=timeSpace[1]-timeSpace[0]
+            heart.t_a.t_a=timeSpace[0]
+            heart.dt.dt=timeSpace[1]-timeSpace[0]
             press_volTime_temp=[]
             samePressure=0
-            while (Cavityvol.vol*(1-voladj))>volumeSpace[curr_volN]:
-            	Cavityvol.vol *= (1-voladj)
-            	solver.solvenonlinear()
-            	p_cav = uflforms.cavitypressure()
-            	V_cav = uflforms.cavityvol()
+            while (heart.Cavityvol.vol*(1-voladj))>volumeSpace[curr_volN]:
+            	heart.Cavityvol.vol *= (1-voladj)
+            	heart.solver.solvenonlinear()
+            	p_cav = heart.uflforms.cavitypressure()
+            	V_cav = heart.uflforms.cavityvol()
             	print ("PLV = ", p_cav*.0075, " VLV = ", V_cav)	
             for curr_timeN in range(len(timeSpace)):
             	t = timeSpace[curr_timeN]
             	if curr_timeN<(len(timeSpace)-1):
-            		dt.dt = timeSpace[curr_timeN+1]-timeSpace[curr_timeN]
+            		heart.dt.dt = timeSpace[curr_timeN+1]-timeSpace[curr_timeN]
             	else :
-            		dt.dt = 1.0
-            	t_a.t_a = t
+            		heart.dt.dt = 1.0
+            	heart.t_a.t_a = t
             	print (curr_volN,'/',len(volumeSpace),curr_timeN,'/',len(timeSpace)," t_a=",t_a)
 
-            	Cavityvol.vol = volumeSpace[curr_volN]
+            	heart.Cavityvol.vol = volumeSpace[curr_volN]
             
-            	solver.solvenonlinear()
-            	print ("PLV = ", uflforms.cavitypressure()*.0075, " VLV = ", uflforms.cavityvol())
-            	press_volTime_temp.append(uflforms.cavitypressure()*.0075)
+            	heart.solver.solvenonlinear()
+            	print ("PLV = ", heart.uflforms.cavitypressure()*.0075, " VLV = ", heart.uflforms.cavityvol())
+            	press_volTime_temp.append(heart.uflforms.cavitypressure()*.0075)
             	if len(press_volTime_temp)>1:
                     if abs(press_volTime_temp[-1]-press_volTime_temp[-2])<10**-12:
                         samePressure+=1
@@ -599,10 +600,11 @@ class LVclosed:
                     runParameters['Laxis_Y']=self.defaultParameters['Laxis_Y']
                     runParameters['Laxis_Z']=self.defaultParameters['Laxis_Z']
                 self.generateMesh(np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),runParameters['endo_angle'] ,runParameters['epi_angle'])
-            solver,uflforms,activeforms,t_a,dt,Cavityvol,f0,mesh_volume,mesh,comm=lcleeHeart..setupHeart(self.casename,self.meshname,runParameters)
+            heart=lcleeHeart.setupHeart(self.casename,self.meshname,runParameters)
+            #solver,uflforms,activeforms,t_a,dt,Cavityvol,f0,mesh_volume,mesh,comm=lcleeHeart..setupHeart(self.casename,self.meshname,runParameters)
             
             ########################### Fenics's Newton  #########################################################
-            Cavityvol.vol = uflforms.cavityvol()
+            heart.Cavityvol.vol = heart.uflforms.cavityvol()
             
             # Closed loop cycle
             BCL = runParameters['BCL']
@@ -614,16 +616,16 @@ class LVclosed:
             cycle = 0.
             t = 0
             tstep = 0
-            dt.dt = 1.
+            heart.dt.dt = 1.
             
             t_array=[0]
-            LVcav_array = [uflforms.cavityvol()]
-            Pcav_array = [uflforms.cavitypressure()*0.0075]
+            LVcav_array = [heart.uflforms.cavityvol()]
+            Pcav_array = [heart.uflforms.cavitypressure()*0.0075]
             
             #Joy Changed from here
             #Stress calculation 
-            cauchy1 =  uflforms.Cauchy1() + activeforms.cauchy()
-            cauchy = fenics.project(cauchy1,fenics.TensorFunctionSpace(mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
+            cauchy1 =  heart.uflforms.Cauchy1() + heart.activeforms.cauchy()
+            cauchy = fenics.project(cauchy1,fenics.TensorFunctionSpace(heart.mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
             cauchy.rename("cauchy_stress","cauchy_stress")
             ###stress_File << cauchy ## wei xuan remove
 
@@ -637,24 +639,24 @@ class LVclosed:
                 startVolume=self.manualVol(runTimeList[0])
             #if Cavityvol.vol>(1.1*runParameters['EDV_LV']):
             # 	raise Exception('Starting cavity volume,'+str(Cavityvol.vol)+', is more than target EDV_LV,'+str(runParameters['EDV_LV']))
-            while Cavityvol.vol<startVolume:
-            	if (1.1*Cavityvol.vol)<startVolume:
-            		Cavityvol.vol *= 1.1
+            while heart.Cavityvol.vol<startVolume:
+            	if (1.1*heart.Cavityvol.vol)<startVolume:
+            		heart.Cavityvol.vol *= 1.1
             	else:
-            		Cavityvol.vol = startVolume
-            	solver.solvenonlinear()
-            	p_cav = uflforms.cavitypressure()
-            	V_cav = uflforms.cavityvol()
+            		heart.Cavityvol.vol = startVolume
+            	heart.solver.solvenonlinear()
+            	p_cav = heart.uflforms.cavitypressure()
+            	V_cav = heart.uflforms.cavityvol()
             	print ("PLV = ", p_cav*.0075, " VLV = ", V_cav)
                 
-            while Cavityvol.vol>startVolume:
-            	if (0.9*Cavityvol.vol)<startVolume:
-            		Cavityvol.vol *= 0.9
+            while heart.Cavityvol.vol>startVolume:
+            	if (0.9*heart.Cavityvol.vol)<startVolume:
+            		heart.Cavityvol.vol *= 0.9
             	else:
-            		Cavityvol.vol = startVolume
-            	solver.solvenonlinear()
-            	p_cav = uflforms.cavitypressure()
-            	V_cav = uflforms.cavityvol()
+            		heart.Cavityvol.vol = startVolume
+            	heart.solver.solvenonlinear()
+            	p_cav = heart.uflforms.cavitypressure()
+            	V_cav = heart.uflforms.cavityvol()
             	print ("PLV = ", p_cav*.0075, " VLV = ", V_cav)
             
                    
@@ -662,7 +664,7 @@ class LVclosed:
                 break
             else:
                 ###need to edit
-            	p_cav = uflforms.cavitypressure()
+            	p_cav = heart.uflforms.cavitypressure()
             	if np.abs((p_cav-runParameters['EDP_LV'])/runParameters['EDP_LV'])>10**-3 and abs(pressureIteration_factor)>10**-3:
             		meshfile=self.casename+ '/'+self.meshname+ '.stl'
             		if not(os.path.isfile(self.casename+ '/'+self.meshname+ '_originalBackup.stl')):
@@ -690,15 +692,15 @@ class LVclosed:
             fdataSVt = open(self.casename+"/"+str(self.runCount)+"/SVpt.txt", "w")
             fdata_stress = open( self.casename+"/"+str(self.runCount)+"/stress/_stress_.txt", "w")
 
-        p_cav = uflforms.cavitypressure()
-        V_cav = uflforms.cavityvol()
+        p_cav = heart.uflforms.cavitypressure()
+        V_cav = heart.uflforms.cavityvol()
         if(fenics.MPI.rank(comm) == 0):
-        	print("Cycle number = ", cycle, " cell time = ", t, " tstep = ", tstep, " dt = ", dt.dt)
+        	print("Cycle number = ", cycle, " cell time = ", t, " tstep = ", tstep, " dt = ", heart.dt.dt)
         	print(tstep, p_cav*0.0075 , V_cav, file=fdataPV)
 
 
         if(fenics.MPI.rank(comm) == 0):
-            displacementfile << w.sub(0)
+            displacementfile << heart.w.sub(0)
         #Joy changed  from here
         cauchy = project(cauchy1,TensorFunctionSpace(mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
         cauchy.rename("cauchy_stress","cauchy_stress")
@@ -706,29 +708,7 @@ class LVclosed:
        	#print (cauchy.vector().array()[:])
         stress_File << cauchy
 
-        if getEmat is True:
-            Emat =  uflforms.Emat()
-            Emat = project(Emat,TensorFunctionSpace(mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
-            Emat.rename("green_strain","green_strain")
-            strain_File << Emat
-
-            EmatECC =  uflforms.EmatECC()
-            EmatECC = project(EmatECC,FunctionSpace(mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
-            EmatECC.rename("ECCgreen_strain","ECCgreen_strain")
-            ECCstrain_File << EmatECC
-
-            EmatELL =  uflforms.EmatELL()
-            EmatELL = project(EmatELL,FunctionSpace(mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
-            EmatELL.rename("ELLgreen_strain","ELLgreen_strain")
-            ELLstrain_File << EmatELL
-            
-            #reader = vtk.vtkXMLUnstructuredGridReader()
-            #reader.SetFileName(strain_File)
-            #reader.Update()  # Needed because of GetScalarRange
-            #output = reader.GetOutput()
-            #potential = output.GetPointData().GetArray("potential")
-
-        sigma_fiber_LV = activeforms.CalculateFiberStress(sigma = cauchy, e_fiber = f0, Vol = mesh_volume, Mesh = mesh)
+        sigma_fiber_LV = heart.activeforms.CalculateFiberStress(sigma = cauchy, e_fiber = f0, Vol = mesh_volume, Mesh = heart.mesh)
        
         #if(fenics.MPI.rank(comm) == 0):
        	#	print (fdata_stress, 0.0, sigma_fiber_LV)
@@ -743,10 +723,10 @@ class LVclosed:
         while(cycle < self.numofCycle):
         	
         	#################################################################
-        	p_cav = uflforms.cavitypressure()
-        	V_cav = uflforms.cavityvol()
+        	p_cav = heart.uflforms.cavitypressure()
+        	V_cav = heart.uflforms.cavityvol()
         	if runTimeList is None:
-        		tstep = tstep + dt.dt
+        		tstep = tstep + heart.dt.dt
         	elif len(runTimeList)<=0:
         		break
         	else:
@@ -756,22 +736,22 @@ class LVclosed:
         	t = tstep - cycle*BCL
         
         	if(t >= 0.0 and t < 4.0):
-        		dt.dt = 0.50
+        		heart.dt.dt = 0.50
         	elif (t >= 200.0 and t < 201.0):
-        		dt.dt = 3
+        		heart.dt.dt = 3
         	else :
-        		dt.dt = 1.0
+        		heart.dt.dt = 1.0
         
-        	t_a.t_a = t
-        	print ("t_a=",t_a)
+        	heart.t_a.t_a = t
+        	print ("t_a=",t)
         
         	
         	if self.manualVol is not None:
         		V_cav=self.manualVol(tstep)
         	elif self.LVage=='adult':
-        		V_cav,V_art,V_ven,V_LA=self.runWinkessel(comm,tstep,dt.dt,p_cav,V_cav,V_art,V_ven,V_LA)
+        		V_cav,V_art,V_ven,V_LA=self.runWinkessel(heart.comm,tstep,heart.dt.dt,p_cav,V_cav,V_art,V_ven,V_LA)
         	else:
-        		V_cav=self.runWinkessel(comm,tstep,dt.dt)
+        		V_cav=self.runWinkessel(heart.comm,tstep,heart.dt.dt)
 
             
         	t_array.append(t)
@@ -781,72 +761,55 @@ class LVclosed:
             #these lines added as between the two timesteps if there is a large volume it will crash, therefore below increases volume gradually
            
 
-        	while Cavityvol.vol<V_cav:
-        		if (1.1*Cavityvol.vol)<V_cav:
-        			Cavityvol.vol *= 1.1
+        	while heart.Cavityvol.vol<V_cav:
+        		if (1.1*heart.Cavityvol.vol)<V_cav:
+        			heart.Cavityvol.vol *= 1.1
         		else:
-        			Cavityvol.vol = V_cav
-        		solver.solvenonlinear()
+        			heart.Cavityvol.vol = V_cav
+        		heart.solver.solvenonlinear()
         		print ("PLV = ", p_cav*.0075, " VLV = ", V_cav)
  
-        	while Cavityvol.vol>V_cav:
-        		if (0.9*Cavityvol.vol)<V_cav:
-        			Cavityvol.vol *= 0.9
+        	while heart.Cavityvol.vol>V_cav:
+        		if (0.9*heart.Cavityvol.vol)<V_cav:
+        			heart.Cavityvol.vol *= 0.9
         		else:
-        			Cavityvol.vol = V_cav
-        		solver.solvenonlinear()
+        			heart.Cavityvol.vol = V_cav
+        		heart.solver.solvenonlinear()
         		print ("PLV = ", p_cav*.0075, " VLV = ", V_cav)
 
             
-        	p_cav = uflforms.cavitypressure()
-        	V_cav = uflforms.cavityvol()
+        	p_cav = heart.uflforms.cavitypressure()
+        	V_cav = heart.uflforms.cavityvol()
 
-        	if(fenics.MPI.rank(comm) == 0):
-        		print("Cycle number = ", cycle, " cell time = ", t, " tstep = ", tstep, " dt = ", dt.dt)
+        	if(fenics.MPI.rank(heart.comm) == 0):
+        		print("Cycle number = ", cycle, " cell time = ", t, " tstep = ", tstep, " dt = ", heart.dt.dt)
         		print(tstep, p_cav*0.0075 , V_cav, file=fdataPV)
         	
 
-        	ls = sqrt(dot(f0, Cmat*f0))*ls0
-        	ls1 = project(ls,Q).vector().get_local()[:]
-        	eca = project(activeforms.ECa(), Q).vector().get_local()[:]
-        	t_r = project(activeforms.tr(), Q).vector().get_local()[:]
+        	ls = sqrt(dot(heart.f0, Cmat*heart.f0))*ls0
+        	ls1 = fenics.project(ls,Q).vector().get_local()[:]
+        	eca = fenics.project(heart.activeforms.ECa(), Q).vector().get_local()[:]
+        	t_r = fenics.project(heart.activeforms.tr(), Q).vector().get_local()[:]
         
-        	if(fenics.MPI.rank(comm) == 0):
-        		print(t_a.t_a, min(ls1), max(ls1), min(eca), max(eca), min(t_r), max(t_r), file=fdatals)
+        	if(fenics.MPI.rank(heart.comm) == 0):
+        		print(heart.t_a.t_a, min(ls1), max(ls1), min(eca), max(eca), min(t_r), max(t_r), file=fdatals)
 
-        	if(fenics.MPI.rank(comm) == 0):
-        		displacementfile << w.sub(0)
+        	if(fenics.MPI.rank(heart.comm) == 0):
+        		displacementfile << heart.w.sub(0)
         	#Joy Chnaged from here
-        	cauchy = project(cauchy1,TensorFunctionSpace(mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
+        	cauchy = fenics.project(cauchy1,fenics.TensorFunctionSpace(heart.mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
         	cauchy.rename("cauchy_stress","cauchy_stress")
         	print (cauchy)
         #	print (cauchy.vector().array()[:])
         	stress_File << cauchy
   
-        	if getEmat is True:
-        		Emat = uflforms.Emat()
-        		Emat = project(Emat,TensorFunctionSpace(mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
-        		Emat.rename("green_strain","green_strain")
-        		strain_File << Emat
-
-        		EmatECC =  uflforms.EmatECC()
-        		EmatECC = project(EmatECC,FunctionSpace(mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
-        		EmatECC.rename("ECCgreen_strain","ECCgreen_strain")
-        		ECCstrain_File << EmatECC
-
-        		EmatELL =  uflforms.EmatELL()
-        		EmatELL = project(EmatELL,FunctionSpace(mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
-        		EmatELL.rename("ELLgreen_strain","ELLgreen_strain")
-        		ELLstrain_File << EmatELL
-
-
-        	sigma_fiber_LV = activeforms.CalculateFiberStress(sigma = cauchy, e_fiber = f0, Vol = mesh_volume, Mesh = mesh)
+        	sigma_fiber_LV = heart.activeforms.CalculateFiberStress(sigma = cauchy, e_fiber = heart.f0, Vol = heart.mesh_volume, Mesh = heart.mesh)
         
-        	if(fenics.MPI.rank(comm) == 0):
+        	if(fenics.MPI.rank(heart.comm) == 0):
         		print (fdata_stress, tstep, sigma_fiber_LV, file=fdata_stress ) 
         	#Joy changed Till here          
         
-        if(fenics.MPI.rank(comm) == 0):
+        if(fenics.MPI.rank(heart.comm) == 0):
         	fdataPV.close()
         
         if (tstep >= runParameters['BCL']):
