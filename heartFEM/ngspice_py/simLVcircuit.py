@@ -1,10 +1,22 @@
+'''
+File: simLVcircuit.py
+Description: simulate circuit with ngspice
+History:
+    Date    Programmer SAR# - Description
+    ---------- ---------- ----------------------------
+  Author: w.x.chan@gmail.com         08MAR2021           - Created
+  Author: w.x.chan@gmail.com         08MAR2021           - v1.0.0
+'''
 ########################################################################
+_version='1.0.0'
+import logging
+logger = logging.getLogger(__name__)
 
 import sys
 import vtk
 import os
 import inspect
-import ngspice_py
+from heartFEM import ngspice_py
 import numpy as np
 from scipy import interpolate
 ########################################################################
@@ -13,7 +25,7 @@ suffixDict={4:'T  ',3:'g  ',2:'meg',1:'k  ',0:' ',-1:'m  ',-2:'u  ',-3:'m  ',-4:
 
 def simLVcircuit(casename,stopTime,lvufile,lvinputvar='V',initLAvol=0,initRAvol=0,initLVvol=0,initRVvol=0,vla0=None,vra0=None,init_file=None,init_time=None,verbose=True):
 
-    if (verbose): print ('*** createLVcircuit ***')
+    logger.info('*** createLVcircuit ***')
 
     cirfilename = casename + ".cir"
     cirtempfilename = casename + "_temp.cir"
@@ -84,8 +96,8 @@ def simLVcircuit(casename,stopTime,lvufile,lvinputvar='V',initLAvol=0,initRAvol=
         if vla0 is None or vra0 is None:
                 data0=np.loadtxt(os.getcwd()+'/temp_'+lvufilename[:-4]+'base.txt',skiprows=10)
                 x0=np.loadtxt(os.getcwd()+'/temp_'+lvufilename[:-4]+'base.txt',skiprows=8,max_rows=1)
-                print(x0)
-                print(data0[:,0])
+                logger.info(repr(x0))
+                logger.info(repr(data0[:,0]))
                 datafunc = interpolate.splrep(x0,data0[:,0])
                 temp_vlv = interpolate.splev(np.array([initLVvol]), datafunc)[0]
                 if vla0 is None:
