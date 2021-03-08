@@ -1,3 +1,38 @@
+'''
+################################################
+MIT License
+Copyright (c) 2019 W. X. Chan
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+################################################
+File: __init__.py
+Description: load all class for heartFEM
+             Contains externally usable class
+History:
+    Date    Programmer SAR# - Description
+    ---------- ---------- ----------------------------
+  Author: w.x.chan@gmail.com         08MAR2021           - Created
+  Author: w.x.chan@gmail.com         08MAR2021           - v2.0.6
+                                                            -ngspice_py v1.0.0
+'''
+_version='2.0.6'
+import logging
+logger = logging.getLogger('heartFEM v'+_version)
+logger.info('heartFEM version '+_version)
+
 import sys
 
 import os as os
@@ -234,8 +269,8 @@ class LVclosed:
             try:
                 self.setRVcurrentFourier(self.casename+'/'+self.meshname+'_rvflowrate.txt')
             except Exception as e:
-                print(e)
-                print('RV fourier not loaded',self.casename+'/'+self.meshname+'_rvflowrate.txt')
+                logger.warning(e)
+                logger.warning('RV fourier not loaded '+self.casename+'/'+self.meshname+'_rvflowrate.txt')
     def setAtrialpulse(self,amp,peaktime,width,atrial_side='rl'):
         #atrial_side = "r" or "l" or 'lr" or "rl"
         if 'l' in atrial_side:
@@ -353,7 +388,7 @@ class LVclosed:
         self.defaultParameters['Laxis_X']=Laxis[0]
         self.defaultParameters['Laxis_Y']=Laxis[1]
         self.defaultParameters['Laxis_Z']=Laxis[2]
-        print('Estimated Laxis as ',Laxis)
+        logger.info('Estimated Laxis as '+repr(Laxis))
     def generateMesh(self,Laxis,endo_angle='',epi_angle='',clipratio=0.95,saveaddstr=''):
         return lcleeHeart.generateMesh(self.casename,self.meshname,Laxis,endo_angle=endo_angle,epi_angle=epi_angle,clipratio=clipratio,meshname=self.meshname+saveaddstr)
     def runWinkessel(self,comm,tstep,dt_dt,*args):
@@ -386,7 +421,7 @@ class LVclosed:
         		else:
         			out = 0.5*math.exp((-t + (1.5*Tmax))/tau);
         		return out   
-        		print ("out=", out)
+        		logger.info("out="+repr(out))
         	Part = 1.0/Cao*(V_art - Vart0);
         	Pven = 1.0/Cven*(V_ven - Vven0);
         	PLV = p_cav;
@@ -397,16 +432,16 @@ class LVclosed:
         		t_la = tstep - BCL + AV;
         
         	if(fenics.MPI.rank(comm) == 0):
-        		print ("t_LA = ", t_la)
+        		logger.info("t_LA = "+repr(t_la))
         
         		PLA = et(t_la,Tmax_la,tau_la)*Ees_la*(V_LA - V0_la) + (1 - et(t_la,Tmax_la,tau_la))*A_la*(math.exp(B_la*(V_LA - V0_la)) - 1);
         	##################################################################################################################################
         
         	if(fenics.MPI.rank(comm) == 0):
-        		print ("P_ven = ",Pven);
-        		print ("P_LV = ", PLV);
-        		print ("P_art = ", Part);		
-        		print ("P_LA = ", PLA);
+        		logger.info("P_ven = "+repr(Pven))
+        		logger.info("P_LV = "+repr(PLV))
+        		logger.info("P_art = "+repr(Part))	
+        		logger.info("P_LA = "+repr(PLA))
         
         	#### conditions for Valves#######################################
         	if(PLV <= Part):
@@ -425,10 +460,10 @@ class LVclosed:
         	Qmv = 1.0/Rven*(Pven - PLA);
         
         	if(fenics.MPI.rank(comm) == 0):
-        		print ("Q_LA = ", Qla) ;
-        		print ("Q_ao = ", Qao) ;
-        		print ("Q_per = ", Qper);
-        		print ("Q_mv = ", Qmv) ;
+        		logger.info("Q_LA = "+repr(Qla))
+        		logger.info("Q_ao = "+repr(Qao))
+        		logger.info("Q_per = "+repr(Qper))
+        		logger.info("Q_mv = "+repr(Qmv))
         
         	V_cav_prev = V_cav
         	V_art_prev = V_art
@@ -440,10 +475,10 @@ class LVclosed:
         	V_LA = V_LA + dt_dt*(Qmv - Qla);
                     
         	if(fenics.MPI.rank(comm) == 0):
-        		print ("V_ven = ", V_ven);
-        		print ("V_LV = ", V_cav);
-        		print ("V_art = ", V_art);
-        		print ("V_LA = ", V_LA);
+        		logger.info("V_ven = "+repr(V_ven))
+        		logger.info("V_LV = "+repr(V_cav))
+        		logger.info("V_art = "+repr(V_art))
+        		logger.info("V_LA = "+repr(V_LA))
                 
         	if(fenics.MPI.rank(comm) == 0):
         		with open(self.casename+"/"+str(self.runCount)+"/cl.txt", "a") as fdatacl:
@@ -474,7 +509,7 @@ class LVclosed:
         	heart.solver.solvenonlinear()
         	p_cav = heart.uflforms.cavitypressure()
         	V_cav = heart.uflforms.cavityvol()
-        	print ("PLV = ", p_cav*.0075, " VLV = ", V_cav)
+        	logger.info("PLV = "+repr(p_cav*.0075)+" VLV = "+repr(V_cav))
         	if abs(heart.uflforms.cavityvol()/targetVolume-1.)<10**-6:
         		break	
         return 1
@@ -494,7 +529,7 @@ class LVclosed:
             heart.solver.solvenonlinear()
             p_cav = heart.uflforms.cavitypressure()
             V_cav = heart.uflforms.cavityvol()
-            print ("PLV = ", p_cav*.0075, " VLV = ", V_cav)	
+            logger.info("PLV = "+repr(p_cav*.0075)+" VLV = "+repr(V_cav))	
             if (heart.uflforms.cavitypressure()*tuneVol)<(targetPressure*tuneVol):
                 voladj=voladj*0.33
                 tuneVol=tuneVol*-1
@@ -545,7 +580,7 @@ class LVclosed:
         if(fenics.MPI.rank(heart.comm) == 0):
             np.savetxt(self.casename+"/"+self.meshname+"_Press_volumeSpace"+saveaddstr+".txt",np.array(volumeSpace))
             np.savetxt(self.casename+"/"+self.meshname+"_Press_timeSpace"+saveaddstr+".txt",np.array(timeSpace))
-        print('========START============')
+        logger.info('========START============')
         press_volTime_base=np.zeros(len(volumeSpace))
         press_volTime=np.zeros((len(volumeSpace),len(timeSpace)))
         maxtimeind=0
@@ -562,12 +597,12 @@ class LVclosed:
             	else :
             		heart.dt.dt = 1.0
             	heart.t_a.t_a = t
-            	print (curr_volN,'/',len(volumeSpace),curr_timeN,'/',len(timeSpace)," t_a=",t)
+            	logger.info(repr(curr_volN)+'/'+repr(len(volumeSpace))+repr(curr_timeN)+'/'+repr(len(timeSpace))+" t_a="+repr(t))
 
             	heart.Cavityvol.vol = volumeSpace[curr_volN]
             
             	heart.solver.solvenonlinear()
-            	print ("PLV = ", heart.uflforms.cavitypressure()*.0075, " VLV = ", heart.uflforms.cavityvol())
+            	logger.info("PLV = "+repr(heart.uflforms.cavitypressure()*.0075)+" VLV = "+repr(heart.uflforms.cavityvol()))
             	press_volTime_temp.append(heart.uflforms.cavitypressure()*.0075)
             	if len(press_volTime_temp)>1:
                     if abs(press_volTime_temp[-1]-press_volTime_temp[-2])<10**-12:
@@ -696,7 +731,7 @@ class LVclosed:
         p_cav = heart.uflforms.cavitypressure()
         V_cav = heart.uflforms.cavityvol()
         if(fenics.MPI.rank(heart.comm) == 0):
-        	print("Cycle number = ", cycle, " cell time = ", t, " tstep = ", tstep, " dt = ", heart.dt.dt)
+        	logger.info("Cycle number = "+repr(cycle)+ " cell time = "+repr(t)+ " tstep = "+repr(tstep)+" dt = "+repr(heart.dt.dt))
         	print(tstep, p_cav*0.0075 , V_cav, file=fdataPV)
 
 
@@ -705,14 +740,10 @@ class LVclosed:
         #Joy changed  from here
         cauchy = fenics.project(cauchy1,fenics.TensorFunctionSpace(heart.mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
         cauchy.rename("cauchy_stress","cauchy_stress")
-       	#print (cauchy)
-       	#print (cauchy.vector().array()[:])
         stress_File << cauchy
 
         sigma_fiber_LV = heart.activeforms.CalculateFiberStress(sigma = cauchy, e_fiber = heart.f0, Vol = heart.mesh_volume, Mesh = heart.mesh)
        
-        #if(fenics.MPI.rank(comm) == 0):
-       	#	print (fdata_stress, 0.0, sigma_fiber_LV)
        	#Joy chnaged till here
         #save files
        
@@ -733,7 +764,7 @@ class LVclosed:
         	else:
         		tstep =runTimeList.pop(0)
         	cycle = math.floor(tstep/BCL)
-        	print ("cycle=",cycle)
+        	logger.info("cycle="+repr(cycle))
         	t = tstep - cycle*BCL
         
         	if(t >= 0.0 and t < 4.0):
@@ -744,7 +775,7 @@ class LVclosed:
         		heart.dt.dt = 1.0
         
         	heart.t_a.t_a = t
-        	print ("t_a=",t)
+        	logger.info("t_a="+repr(t))
         
         	
         	if self.manualVol is not None:
@@ -761,29 +792,14 @@ class LVclosed:
             
             #these lines added as between the two timesteps if there is a large volume it will crash, therefore below increases volume gradually
            
-
-        	while heart.Cavityvol.vol<V_cav:
-        		if (1.1*heart.Cavityvol.vol)<V_cav:
-        			heart.Cavityvol.vol *= 1.1
-        		else:
-        			heart.Cavityvol.vol = V_cav
-        		heart.solver.solvenonlinear()
-        		print ("PLV = ", p_cav*.0075, " VLV = ", V_cav)
- 
-        	while heart.Cavityvol.vol>V_cav:
-        		if (0.9*heart.Cavityvol.vol)<V_cav:
-        			heart.Cavityvol.vol *= 0.9
-        		else:
-        			heart.Cavityvol.vol = V_cav
-        		heart.solver.solvenonlinear()
-        		print ("PLV = ", p_cav*.0075, " VLV = ", V_cav)
+        	self.solveVolume(heart,V_cav)
 
             
         	p_cav = heart.uflforms.cavitypressure()
         	V_cav = heart.uflforms.cavityvol()
 
         	if(fenics.MPI.rank(heart.comm) == 0):
-        		print("Cycle number = ", cycle, " cell time = ", t, " tstep = ", tstep, " dt = ", heart.dt.dt)
+        		logger.info("Cycle number = "+repr(cycle)+ " cell time = "+repr(t)+ " tstep = "+repr(tstep)+" dt = "+repr(heart.dt.dt))
         		print(tstep, p_cav*0.0075 , V_cav, file=fdataPV)
         	ls0 = runParameters['l0']
         	ls = fenics.sqrt(fenics.dot(heart.f0, heart.Cmat*heart.f0))*ls0
@@ -799,8 +815,8 @@ class LVclosed:
         	#Joy Chnaged from here
         	cauchy = fenics.project(cauchy1,fenics.TensorFunctionSpace(heart.mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
         	cauchy.rename("cauchy_stress","cauchy_stress")
-        	print (cauchy)
-        #	print (cauchy.vector().array()[:])
+        	#print (cauchy)
+        	#print (cauchy.vector().array()[:])
         	stress_File << cauchy
   
         	sigma_fiber_LV = heart.activeforms.CalculateFiberStress(sigma = cauchy, e_fiber = heart.f0, Vol = heart.mesh_volume, Mesh = heart.mesh)
@@ -817,7 +833,6 @@ class LVclosed:
         	temp_Ind=np.nonzero((t_array[2:]-t_array[:-2])>0)[0][-1]
         	temp_ind=np.nonzero(np.logical_and(t_array[:temp_Ind]>t_array[temp_Ind],t_array[:temp_Ind]<t_array[temp_Ind+2]))[0][-1]
 
-        	#print >>fdataSV,tstep, p_cav*0.0075, V_cav
         	LVcav_arrayT=LVcav_array[(temp_ind-1):]
         	Pcav_arrayT=Pcav_array[(temp_ind-1):]
         	plt.plot(LVcav_arrayT, Pcav_arrayT)
@@ -835,12 +850,6 @@ class LVclosed:
         	fdata_stress.close() #Joy Changed here	
         ######################################################################################################
         return runParameters
-
-    # def getaverageLVstrain(runTimeList=None):
-    #     uflforms = Forms(params)
-    #     Emat = uflforms.Emat()
-    #     eCC=numpy.dot(numpy.array(Emat)[:,0], eC)
-    #     print(eCC)
         
 class optimiser_linker:
     def __new__(cls, *args, **kwargs):
