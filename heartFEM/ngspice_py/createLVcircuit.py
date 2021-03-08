@@ -1,10 +1,22 @@
+'''
+File: createLVcircuit.py
+Description: creates a ngspice circuit from templete
+History:
+    Date    Programmer SAR# - Description
+    ---------- ---------- ----------------------------
+  Author: w.x.chan@gmail.com         08MAR2021           - Created
+  Author: w.x.chan@gmail.com         08MAR2021           - v1.0.0
+'''
 ########################################################################
+_version='1.0.0'
+import logging
+logger = logging.getLogger(__name__)
 
 import sys
 import vtk
 import os
 import inspect
-import ngspice_py
+from heartFEM import ngspice_py
 import numpy as np
 ########################################################################
 Components=['lv','la','rv','ra','aa','ao1','ao2','ao3','ao4','br','ca','ub','he','inte','ivc','kid','leg','lung','pa1','pa2','plac','svc','uv']
@@ -23,14 +35,14 @@ suffixDict={4:'T  ',3:'g  ',2:'meg',1:'k  ',0:' ',-1:'m  ',-2:'u  ',-3:'m  ',-4:
 
 def createLVcircuit(casename,paramDict,verbose=True):
 
-    if (verbose): print ('*** createLVcircuit ***')
+    logger.info('*** createLVcircuit ***')
 
     cur_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))) 
     savePath=os.path.dirname(os.path.abspath(casename))
     LVcirfile = cur_dir + "/LV.cir"
     cirfilename = casename + ".cir"
     
-    print('cur_dir',cur_dir)
+    logger.info('cur_dir ' +repr(cur_dir))
     cmd = "cp " + LVcirfile + " " + cirfilename
     os.system(cmd)
     for key in keyToFill:
