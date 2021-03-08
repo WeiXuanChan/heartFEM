@@ -1,10 +1,23 @@
+'''
+File: generateLVtable.py
+Description: creates a table to be used as LV source 2dtable
+History:
+    Date    Programmer SAR# - Description
+    ---------- ---------- ----------------------------
+  Author: w.x.chan@gmail.com         08MAR2021           - Created
+  Author: w.x.chan@gmail.com         08MAR2021           - v1.0.0
+'''
 ########################################################################
+_version='1.0.0'
+import logging
+logger = logging.getLogger(__name__)
+
 
 import sys
 import vtk
 import os
 import inspect
-import ngspice_py
+from heartFEM import ngspice_py
 import numpy as np
 from scipy import interpolate
 ########################################################################
@@ -24,7 +37,7 @@ suffixDict={4:'T  ',3:'g  ',2:'meg',1:'k  ',0:' ',-1:'m  ',-2:'u  ',-3:'m  ',-4:
 
 def generateLVtable(casename,period,timetopeak=None,verbose=True,stackaddstr=None):
     #period same units as timeSpace
-    if (verbose): print ('*** generateLVtable ***')
+    logger.info('*** generateLVtable ***')
     period=period/1000.
     if stackaddstr is None:
         stackaddstr=['']
