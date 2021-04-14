@@ -6,9 +6,10 @@ History:
     ---------- ---------- ----------------------------
   Author: w.x.chan@gmail.com         08MAR2021           - Created
   Author: w.x.chan@gmail.com         08MAR2021           - v1.0.0
+  Author: w.x.chan@gmail.com         13APR2021           - v2.0.0
 '''
 ########################################################################
-_version='1.0.0'
+_version='2.0.0'
 import logging
 logger = logging.getLogger(__name__)
 
@@ -33,10 +34,11 @@ for comp in linkComponents:
     
 suffixDict={4:'T  ',3:'g  ',2:'meg',1:'k  ',0:' ',-1:'m  ',-2:'u  ',-3:'m  ',-4:'p  ',-5:'f  '}
 
-def createLVcircuit(casename,paramDict,verbose=True):
+def createLVcircuit(casename,paramDict,skipVariableList=None,verbose=True):
 
     logger.info('*** createLVcircuit ***')
-
+    if skipVariableList is None:
+        skipVariableList=[]
     cur_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))) 
     savePath=os.path.dirname(os.path.abspath(casename))
     LVcirfile = cur_dir + "/LV.cir"
@@ -46,49 +48,55 @@ def createLVcircuit(casename,paramDict,verbose=True):
     cmd = "cp " + LVcirfile + " " + cirfilename
     os.system(cmd)
     for key in keyToFill:
-        addstr='{:10.6f}   '.format(0)
-        if key in paramDict:
-            if isinstance(paramDict[key],(float,int)):
-                if paramDict[key]!=0:
-                    suffixDict_ind=max(-5,min(4,int(np.floor(np.log10(abs(paramDict[key]))/3.))))
-                    addstr='{:10.6f}'.format(paramDict[key]/(1000.**suffixDict_ind))+suffixDict[suffixDict_ind]
-        cmd = "sed -i.bak s/'<<"+key+">>'/'" + addstr + "'/g " + cirfilename
+        if key not in skipVariableList:
+            addstr='{:10.6f}   '.format(0)
+            if key in paramDict:
+                if isinstance(paramDict[key],(float,int)):
+                    if paramDict[key]!=0:
+                        suffixDict_ind=max(-5,min(4,int(np.floor(np.log10(abs(paramDict[key]))/3.))))
+                        addstr='{:10.6f}'.format(paramDict[key]/(1000.**suffixDict_ind))+suffixDict[suffixDict_ind]
+            cmd = "sed -i.bak s/'<<"+key+">>'/'" + addstr + "'/g " + cirfilename
+            os.system(cmd)
+    if "cycle" not in skipVariableList:
+        cmd = "sed -i.bak s/'<<cycle>>'/'" + '{:10.6f}'.format(paramDict['BCL']) + "m'/g " + cirfilename
         os.system(cmd)
-    cmd = "sed -i.bak s/'<<cycle>>'/'" + '{:10.6f}'.format(paramDict['BCL']) + "m'/g " + cirfilename
-    os.system(cmd)
     for side in ['l','r']:
         for tempstr in ['aamp','apeaktime','awidth']:
-            cmd = "sed -i.bak s/'<<"+side+tempstr+">>'/'" + '{:10.6f}'.format(paramDict[side+tempstr]) + "'/g " + cirfilename
-            os.system(cmd)
-    cmd = "sed -i.bak s/'<<rvfunc>>'/'" + paramDict['rvfunc'] + "'/g " + cirfilename
-    os.system(cmd)
-    
-    cmd = "sed -i.bak s/'<<timetopeaktension>>'/'" + str(paramDict['t0'])+ "m'/g " + cirfilename
-    os.system(cmd)
-    
-    for n in range(int(len(paramDict['rvfuncarg'])/2)):
-        if n>0:
-            cmd = "sed -i.bak s/'*Irvu"+str(n+1)+"'/'" + "Irvu"+str(n+1) + "'/g " + cirfilename
-            os.system(cmd)
-        suffixDict_ind=max(-5,min(4,int(np.floor(np.log10(abs(paramDict[paramDict['rvfuncarg'][n*2]]))/3.))))
-        rvfuncarg='{:10.6f}'.format(paramDict[paramDict['rvfuncarg'][n*2]]/(1000.**suffixDict_ind))+suffixDict[suffixDict_ind]
-        cmd = "sed -i.bak s/'<<rvuamp"+str(n+1)+">>'/'" + rvfuncarg + "'/g " + cirfilename
+            if side+tempstr not in skipVariableList:
+                cmd = "sed -i.bak s/'<<"+side+tempstr+">>'/'" + '{:10.6f}'.format(paramDict[side+tempstr]) + "'/g " + cirfilename
+                os.system(cmd)
+    if "rvfunc" not in skipVariableList:
+        cmd = "sed -i.bak s/'<<rvfunc>>'/'" + paramDict['rvfunc'] + "'/g " + cirfilename
         os.system(cmd)
+    if "timetopeaktension" not in skipVariableList:
+        cmd = "sed -i.bak s/'<<timetopeaktension>>'/'" + str(paramDict['t0'])+ "m'/g " + cirfilename
+        os.system(cmd)
+    if "rvfuncarg" not in skipVariableList:
+        for n in range(int(len(paramDict['rvfuncarg'])/2)):
+            if n>0:
+                cmd = "sed -i.bak s/'*Irvu"+str(n+1)+"'/'" + "Irvu"+str(n+1) + "'/g " + cirfilename
+                os.system(cmd)
+            suffixDict_ind=max(-5,min(4,int(np.floor(np.log10(abs(paramDict[paramDict['rvfuncarg'][n*2]]))/3.))))
+            rvfuncarg='{:10.6f}'.format(paramDict[paramDict['rvfuncarg'][n*2]]/(1000.**suffixDict_ind))+suffixDict[suffixDict_ind]
+            
+            cmd = "sed -i.bak s/'<<rvuamp"+str(n+1)+">>'/'" + rvfuncarg + "'/g " + cirfilename
+            os.system(cmd)
         
-        rvfuncarg='{:10.6f}'.format(paramDict[paramDict['rvfuncarg'][n*2+1]])
-        cmd = "sed -i.bak s/'<<rvuphase"+str(n+1)+">>'/'" + rvfuncarg + "'/g " + cirfilename
+            rvfuncarg='{:10.6f}'.format(paramDict[paramDict['rvfuncarg'][n*2+1]])
+            cmd = "sed -i.bak s/'<<rvuphase"+str(n+1)+">>'/'" + rvfuncarg + "'/g " + cirfilename
+            os.system(cmd)
+    
+    if "stepTime" not in skipVariableList:
+        cmd = "sed -i.bak s/'<<stepTime>>'/'" + '10u'+ "'/g " + cirfilename
         os.system(cmd)
-    
+    if skipVariableList is None:
+        rvdatabase=np.loadtxt(casename+'_rvflowrate.txt')
+        rvdata=rvdatabase.copy()
+        for n in range(1,11):
+            rvdata=np.concatenate((rvdata,rvdatabase+np.array([[paramDict['BCL']*n/1000.,0.]])),axis=0)
+        lvufilecontrol=casename+'_lvflowratecontrol.txt'
+        np.savetxt(lvufilecontrol,rvdata)
+        ngspice_py.simLVcircuit(casename,paramDict['BCL']*10.,lvufilecontrol,lvinputvar='i')
+        lvdata=np.loadtxt(casename+'_circuit.txt',skiprows=1)[:,:2]
+        np.savetxt(casename+'_lvucontrol.txt',lvdata)
 
-    cmd = "sed -i.bak s/'<<stepTime>>'/'" + '10u'+ "'/g " + cirfilename
-    os.system(cmd)
-    
-    rvdatabase=np.loadtxt(casename+'_rvflowrate.txt')
-    rvdata=rvdatabase.copy()
-    for n in range(1,11):
-        rvdata=np.concatenate((rvdata,rvdatabase+np.array([[paramDict['BCL']*n/1000.,0.]])),axis=0)
-    lvufilecontrol=casename+'_lvflowratecontrol.txt'
-    np.savetxt(lvufilecontrol,rvdata)
-    ngspice_py.simLVcircuit(casename,paramDict['BCL']*10.,lvufilecontrol,lvinputvar='i')
-    lvdata=np.loadtxt(casename+'_circuit.txt',skiprows=1)[:,:2]
-    np.savetxt(casename+'_lvucontrol.txt',lvdata)
