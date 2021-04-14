@@ -6,9 +6,10 @@ History:
     ---------- ---------- ----------------------------
   Author: w.x.chan@gmail.com         08MAR2021           - Created
   Author: w.x.chan@gmail.com         08MAR2021           - v1.0.0
+  Author: w.x.chan@gmail.com         13APR2021           - v2.0.0
 '''
 ########################################################################
-_version='1.0.0'
+_version='2.0.0'
 import logging
 logger = logging.getLogger(__name__)
 
@@ -23,9 +24,9 @@ from scipy import interpolate
 
 suffixDict={4:'T  ',3:'g  ',2:'meg',1:'k  ',0:' ',-1:'m  ',-2:'u  ',-3:'m  ',-4:'p  ',-5:'f  '}
 
-def simLVcircuit(casename,stopTime,lvufile,lvinputvar='V',initLAvol=0,initRAvol=0,initLVvol=0,initRVvol=0,vla0=None,vra0=None,init_file=None,init_time=None,verbose=True):
+def simLVcircuit(casename,stopTime,lvufile,lvinputvar='V',initLAvol=0,initRAvol=0,initLVvol=0,initRVvol=0,vla0=None,vra0=None,init_file=None,init_time=None,additionalVarDict=None,timetopeak_from_to=None,verbose=True):
 
-    logger.info('*** createLVcircuit ***')
+    logger.info('*** simulateLVcircuit ***')
 
     cirfilename = casename + ".cir"
     cirtempfilename = casename + "_temp.cir"
@@ -76,6 +77,24 @@ def simLVcircuit(casename,stopTime,lvufile,lvinputvar='V',initLAvol=0,initRAvol=
         case_dir,lvufilename = os.path.split(lvufile)
         cmd = "cp "+lvufile+" " +'./temp_'+lvufilename
         os.system(cmd)
+        if timetopeak_from_to is not None:
+            if timetopeak_from_to[1]!=timetopeak_from_to[0]:
+                with open(os.getcwd()+'/temp_'+lvufilename,'r') as f:
+                    lines=f.readlines()
+                ytime=np.loadtxt(lvufile,skiprows=8,max_rows=1).reshape(-1)
+                setAbove=(ytime>=(timetopeak_from_to[0]/1000.))
+                setBelow=(ytime<(timetopeak_from_to[0]/1000.))
+                ytime[setAbove]=ytime[setAbove]+(timetopeak_from_to[1]-timetopeak_from_to[0])/1000.
+                ytime[setBelow]=ytime[setBelow]*(timetopeak_from_to[1]/timetopeak_from_to[0])
+                ytime=np.round(ytime,decimals=4)
+                lines[8]=' '.join(ytime.astype(str))+'\n'
+                with open(os.getcwd()+'/temp_'+lvufilename,'w') as f:
+                    f.writelines(lines)
+            if additionalVarDict is not None:
+                if 'timetopeaktension' not in additionalVarDict:
+                    additionalVarDict['timetopeaktension']=str(timetopeak_from_to[1])+'m'
+            else:
+                additionalVarDict={'timetopeaktension':str(timetopeak_from_to[1])+'m'}
         cmd = "cp "+lvufile[:-4]+'base.txt'+" " +'./temp_'+lvufilename[:-4]+'base.txt'
         os.system(cmd)
         cmd = "sed -i.bak s/'<<lvutablefile>>'/'temp_" +lvufilename + "'/g " + cirtempfilename
@@ -96,10 +115,10 @@ def simLVcircuit(casename,stopTime,lvufile,lvinputvar='V',initLAvol=0,initRAvol=
         if vla0 is None or vra0 is None:
                 data0=np.loadtxt(os.getcwd()+'/temp_'+lvufilename[:-4]+'base.txt',skiprows=10)
                 x0=np.loadtxt(os.getcwd()+'/temp_'+lvufilename[:-4]+'base.txt',skiprows=8,max_rows=1)
-                logger.info(repr(x0))
-                logger.info(repr(data0[:,0]))
+                
                 datafunc = interpolate.splrep(x0,data0[:,0])
                 temp_vlv = interpolate.splev(np.array([initLVvol]), datafunc)[0]
+                logger.info('LV pressure start is '+repr(temp_vlv))
                 if vla0 is None:
                     vla0 = temp_vlv*0.95
                 if vra0 is None:
@@ -134,10 +153,14 @@ def simLVcircuit(casename,stopTime,lvufile,lvinputvar='V',initLAvol=0,initRAvol=
     cmd = "sed -i.bak s/'<<outfile>>'/'" + outfilename+'circuit.txt' + "'/g " + cirtempfilename
     os.system(cmd)
     
+    if additionalVarDict is not None:
+        for key in additionalVarDict:
+            cmd = "sed -i.bak s/'<<"+key+">>'/'"+additionalVarDict[key]+"'/g " + cirtempfilename
+            os.system(cmd)
     cmd = "ngspice -o "+cirlogfilename+" -b " + cirtempfilename
     os.system(cmd)
     
-    cmd = "mv " +'./'+outfilename+'circuit.txt '+case_dir+'/'+outfilename+'_circuit.txt'
+    cmd = "mv " +'./'+outfilename+'circuit.txt '+case_dir+'/'+'circuit_results.txt'
     os.system(cmd)
 
     #if lvinputvar=='i' or lvinputvar=='v':
