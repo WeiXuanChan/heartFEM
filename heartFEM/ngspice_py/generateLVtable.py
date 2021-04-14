@@ -6,9 +6,10 @@ History:
     ---------- ---------- ----------------------------
   Author: w.x.chan@gmail.com         08MAR2021           - Created
   Author: w.x.chan@gmail.com         08MAR2021           - v1.0.0
+  Author: w.x.chan@gmail.com         13APR2021           - v2.0.0
 '''
 ########################################################################
-_version='1.0.0'
+_version='2.0.0'
 import logging
 logger = logging.getLogger(__name__)
 
@@ -35,19 +36,21 @@ for comp in linkComponents:
     
 suffixDict={4:'T  ',3:'g  ',2:'meg',1:'k  ',0:' ',-1:'m  ',-2:'u  ',-3:'m  ',-4:'p  ',-5:'f  '}
 
-def generateLVtable(casename,period,timetopeak=None,verbose=True,stackaddstr=None):
+def generateLVtable(casename,period,timetopeak=None,verbose=True,stackaddstr=None,loading_casename=None):
     #period same units as timeSpace
     logger.info('*** generateLVtable ***')
+    if loading_casename is None:
+        loading_casename=casename
     period=period/1000.
     if stackaddstr is None:
         stackaddstr=['']
     datatable=[]
     for addstr in stackaddstr:
-        datatable.append(np.loadtxt(casename+"_Press_VolTime"+addstr+".txt"))
+        datatable.append(np.loadtxt(loading_casename+"_Press_VolTime"+addstr+".txt"))
     if len(datatable)>1:
         datatable=np.concatenate(datatable,axis=0)
     else:
-        datatable=datatable[0]
+        datatable=np.array(datatable[0])
     LVtablefile = casename + "_lvcirtable.txt"
     datatable=datatable[::-1]
     
@@ -55,17 +58,17 @@ def generateLVtable(casename,period,timetopeak=None,verbose=True,stackaddstr=Non
     np.savetxt(LVtablefile,datatable,fmt='%.9e')
     with open(LVtablefile,'r') as f:
         lines=f.readlines()
-    ytime=np.loadtxt(casename+"_Press_timeSpace.txt")/1000.
+    ytime=np.loadtxt(loading_casename+"_Press_timeSpace.txt")/1000.
     
     ytime=np.round(ytime,decimals=4)
     
     xvol=[]
     for addstr in stackaddstr:
-        xvol.append(np.loadtxt(casename+"_Press_volumeSpace"+addstr+".txt"))
+        xvol.append(np.loadtxt(loading_casename+"_Press_volumeSpace"+addstr+".txt"))
     if len(xvol)>1:
         xvol=np.concatenate(xvol,axis=0)
     else:
-        xvol=xvol[0]
+        xvol=np.array(xvol[0])
     xvol=xvol[::-1]
     
     
@@ -132,9 +135,11 @@ def generateLVtable(casename,period,timetopeak=None,verbose=True,stackaddstr=Non
     LVtablebasefile = casename + "_lvcirtablebase.txt"
     datatable=[]
     for addstr in stackaddstr:
-        datatable.append(np.loadtxt(casename+"_Press_VolTime_base"+addstr+".txt"))
+        datatable.append(np.loadtxt(loading_casename+"_Press_VolTime_base"+addstr+".txt"))
     if len(datatable)>1:
         datatable=np.concatenate(datatable,axis=0)
+    else:
+        datatable=np.array(datatable[0])
     datatable=datatable[::-1]
     datatable=np.concatenate((datatable.reshape((-1,1)),datatable.reshape((-1,1)),datatable.reshape((-1,1))),axis=1)
     np.savetxt(LVtablebasefile,datatable,fmt='%.9e')
