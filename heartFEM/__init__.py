@@ -62,7 +62,11 @@ from heartFEM import ngspice_py
 from heartFEM import heartParameters
 from mpi4py import MPI as pyMPI
 
-import lcleeHeart
+try:
+    import lcleeHeart
+except Exception as e:
+    logger.warning('Unable to load Module "lcleeHeart".')
+    logger.warning(repr(e))
 import motionSegmentation.BsplineFourier as bsf
  
 WindkesselComponents=['lv','la','rv','ra','aa','ao1','ao2','ao3','ao4','br','ca','ub','he','inte','ivc','kid','leg','lung','pa1','pa2','plac','svc','uv']
