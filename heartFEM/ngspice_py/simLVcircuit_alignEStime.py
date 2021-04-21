@@ -6,9 +6,10 @@ History:
     ---------- ---------- ----------------------------
   Author: w.x.chan@gmail.com         08MAR2021           - Created
   Author: w.x.chan@gmail.com         13APR2021           - v2.0.0
+  Author: w.x.chan@gmail.com         21APR2021           - v2.1.0
 '''
 ########################################################################
-_version='2.0.0'
+_version='2.1.0'
 import logging
 logger = logging.getLogger(__name__)
 
