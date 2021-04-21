@@ -26,7 +26,7 @@ History:
     ---------- ---------- ----------------------------
   Author: w.x.chan@gmail.com         05APR2021           - Created
 '''
-_version='1.0.0'
+_version='1.1.0'
 import logging
 logger = logging.getLogger(__name__)
 
