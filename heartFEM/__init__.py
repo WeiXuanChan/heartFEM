@@ -961,7 +961,10 @@ class LVclosed:
                 self.getLVbehavior(runParameters=runParameters,meshname=meshname,meshFolder=folderToLVbehavior,volstep=volstep,toRunCountFolder=folderToLVbehavior)
             else:
                 self.getLVbehavior(runParameters=runParameters,meshname=meshname,volstep=volstep,toRunCountFolder=folderToLVbehavior)
-        ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],loading_casename=self.casename+folderToLVbehavior+'/'+meshname)
+        if folderToLVbehavior is None:
+            ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],loading_casename=self.casename+'/'+meshname)
+        else:
+            ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],loading_casename=self.casename+folderToLVbehavior+'/'+meshname)
         cmd = "cp "+self.casename+'/'+self.meshname+'_rvflowrate.txt'+" " + self.casename+"/"+str(self.runCount)+'/'+meshname+'_rvflowrate.txt'
         os.system(cmd)
         if 'ES_time' not in runParameters:
