@@ -1026,6 +1026,7 @@ class LVclosed:
             t = 0
             tstep = 0
             heart.dt.dt = 1.
+            dt=1.
             
             t_array=[0]
             LVcav_array = [heart.uflforms.cavityvol()]
@@ -1093,7 +1094,7 @@ class LVclosed:
         	p_cav = heart.uflforms.cavitypressure()
         	V_cav = heart.uflforms.cavityvol()
         	if runTimeList is None:
-        		tstep = tstep + heart.dt.dt
+        		tstep = tstep + dt
         	elif len(runTimeList)<=0:
         		break
         	else:
