@@ -37,8 +37,12 @@ History:
   Author: w.x.chan@gmail.com         21APR2021           - v2.3.0
                                                             -ngspice_py v2.1.0
                                                             -debug getLVbehaviour non-convergence
+  Author: w.x.chan@gmail.com         21APR2021           - v2.3.1
+                                                            -ngspice_py v2.1.0
+                                                            -debug LVbehaviorRun for folderToLVbehavior=None where ngspice_py.generateLVtable use folderToLVbehavior
+                                                            -debug solveTa to include changing heart.dt.dt
 '''
-_version='2.3.0'
+_version='2.3.1'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
@@ -408,6 +412,7 @@ class LVclosed:
         		heart.t_a.t_a =t+dt*tuneTa
         	else:
         		heart.t_a.t_a = targetTa
+        	heart.dt.dt=dt
         	heart.solver.solvenonlinear()
         	p_cav = heart.uflforms.cavitypressure()
         	V_cav = heart.uflforms.cavityvol()
