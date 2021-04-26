@@ -8,9 +8,11 @@ History:
   Author: w.x.chan@gmail.com         08MAR2021           - v1.0.0
   Author: w.x.chan@gmail.com         13APR2021           - v2.0.0
   Author: w.x.chan@gmail.com         21APR2021           - v2.1.0
+  Author: w.x.chan@gmail.com         21APR2021           - v2.1.1
+                                                            -debug when stackaddstr is not sorted and/or not unique
 '''
 ########################################################################
-_version='2.1.0'
+_version='2.1.1'
 import logging
 logger = logging.getLogger(__name__)
 
@@ -45,18 +47,8 @@ def generateLVtable(casename,period,timetopeak=None,verbose=True,stackaddstr=Non
     period=period/1000.
     if stackaddstr is None:
         stackaddstr=['']
-    datatable=[]
-    for addstr in stackaddstr:
-        datatable.append(np.loadtxt(loading_casename+"_Press_VolTime"+addstr+".txt"))
-    if len(datatable)>1:
-        datatable=np.concatenate(datatable,axis=0)
-    else:
-        datatable=np.array(datatable[0])
     LVtablefile = casename + "_lvcirtable.txt"
-    datatable=datatable[::-1]
     
-    datatable=datatable.T
-    np.savetxt(LVtablefile,datatable,fmt='%.9e')
     with open(LVtablefile,'r') as f:
         lines=f.readlines()
     ytime=np.loadtxt(loading_casename+"_Press_timeSpace.txt")/1000.
@@ -70,7 +62,20 @@ def generateLVtable(casename,period,timetopeak=None,verbose=True,stackaddstr=Non
         xvol=np.concatenate(xvol,axis=0)
     else:
         xvol=np.array(xvol[0])
-    xvol=xvol[::-1]
+    xvol, sortVolume=np.unique(xvol, return_index=True)
+    
+    datatable=[]
+    for addstr in stackaddstr:
+        datatable.append(np.loadtxt(loading_casename+"_Press_VolTime"+addstr+".txt"))
+    if len(datatable)>1:
+        datatable=np.concatenate(datatable,axis=0)
+    else:
+        datatable=np.array(datatable[0])
+    datatable=datatable[sortVolume]
+    
+    datatable=datatable.T
+    np.savetxt(LVtablefile,datatable,fmt='%.9e')
+
     
     
     newline=['*table source\n',
