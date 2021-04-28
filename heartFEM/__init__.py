@@ -974,13 +974,13 @@ class LVclosed:
         os.system(cmd)
         if 'ES_time' not in runParameters:
             ngspice_py.createLVcircuit(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters)
-            ngspice_py.simLVcircuit(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL']*10,self.casename+"/"+str(self.runCount)+'/'+meshname+'_lvcirtable.txt',lvinputvar='table2d',initLVvol=runParameters['EDV_LV'])
+            ngspice_py.simLVcircuit(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL']*10,self.casename+"/"+str(self.runCount)+'/'+meshname+'_lvcirtable.txt',lvinputvar='table2dtrackrelaxphase',initLVvol=runParameters['EDV_LV'])
         else:
             if runParameters['ES_time'] is None:
                 ngspice_py.createLVcircuit(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters)
             else:
                 ngspice_py.createLVcircuit(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters,skipVariableList=["timetopeaktension"])
-            ngspice_py.simLVcircuit_align_EDvol_and_EStime(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL']*10,self.casename+"/"+str(self.runCount)+'/'+meshname+'_lvcirtable.txt',runParameters['BCL'],runParameters['ES_time'],runParameters['t0'],lvinputvar='table2d',initLVvol=runParameters['EDV_LV'])
+            ngspice_py.simLVcircuit_align_EDvol_and_EStime(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL']*10,self.casename+"/"+str(self.runCount)+'/'+meshname+'_lvcirtable.txt',runParameters['BCL'],runParameters['ES_time'],runParameters['t0'],lvinputvar='table2dtrackrelaxphase',initLVvol=runParameters['EDV_LV'])
         return runParameters
     def iterativeRun(self,editParameters=None,always_remesh=False,runTimeList=None):
         runParameters=self.defaultParameters.copy()
