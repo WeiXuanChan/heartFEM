@@ -41,8 +41,11 @@ History:
                                                             -ngspice_py v2.1.0
                                                             -debug LVbehaviorRun for folderToLVbehavior=None where ngspice_py.generateLVtable use folderToLVbehavior
                                                             -debug solveTa to include changing heart.dt.dt
+  Author: w.x.chan@gmail.com         21APR2021           - v2.3.2
+                                                            -ngspice_py v2.1.0
+                                                            -debug iterativeRun to save mesh into folder and solve without incremental t_a
 '''
-_version='2.3.1'
+_version='2.3.2'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
@@ -412,7 +415,9 @@ class LVclosed:
         		heart.t_a.t_a =t+dt*tuneTa
         	else:
         		heart.t_a.t_a = targetTa
-        	heart.dt.dt=dt
+            
+        	heart.dt.dt=abs(heart.t_a.t_a-t)
+        	logger.info("heart.t_a.t_a = "+repr(heart.t_a.t_a)+" heart.dt.dt = "+repr(heart.dt.dt))
         	heart.solver.solvenonlinear()
         	p_cav = heart.uflforms.cavitypressure()
         	V_cav = heart.uflforms.cavityvol()
@@ -554,6 +559,7 @@ class LVclosed:
             press_volTime_base[curr_volN]=min(press_volTime_temp[-1],press_volTime_temp[0])
             press_volTime[curr_volN,:len(press_volTime_temp)]=np.array(press_volTime_temp)-press_volTime_base[curr_volN]
             if len(timeSpace)==1:
+                volPress[curr_volN,0]=heart.uflforms.cavityvol()
                 volPress[curr_volN,1]=press_volTime_base[curr_volN]+press_volTime[curr_volN,0]
             if(fenics.MPI.rank(heart.comm) == 0):
                 if len(timeSpace)>1:
@@ -947,11 +953,11 @@ class LVclosed:
         if unloadGeo:
             if folderToLVbehavior is not None and min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])>0:
                 if not(os.path.isfile(self.casename+folderToLVbehavior+'/'+self.meshname+'_unloadedmesh.hdf5')):
-                    self.getUnloadedGeometry(editParameters=runParameters,savename=self.meshname+'_unloadedmesh',toRunCountFolder=folderToLVbehavior)
+                    self.getUnloadedGeometry(editParameters=runParameters,savename=self.meshname+'_unloadedmesh',targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],toRunCountFolder=folderToLVbehavior)
             elif min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
-                self.getUnloadedGeometry(editParameters=runParameters,casename=self.casename+'/'+str(self.runCount),savename=self.meshname+'_unloadedmesh')
+                self.getUnloadedGeometry(editParameters=runParameters,casename=self.casename+'/'+str(self.runCount),targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],savename=self.meshname+'_unloadedmesh')
             else:
-                self.getUnloadedGeometry(editParameters=runParameters,savename=self.meshname+'_unloadedmesh',toRunCountFolder=True)
+                self.getUnloadedGeometry(editParameters=runParameters,savename=self.meshname+'_unloadedmesh',targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],toRunCountFolder=True)
         volstep=runParameters['ESV_LV']*0.9*(runParameters['EDV_LV']/runParameters['ESV_LV']*1.1/0.9)**(np.linspace(0,1,num=50))[::-1]
         volstep=np.concatenate((volstep[:1]*1.3,volstep[:1]*1.1,volstep,volstep[-1:]*0.9,volstep[-1:]*0.7),axis=0)
         if folderToLVbehavior is None or min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<=1:
@@ -967,9 +973,9 @@ class LVclosed:
             else:
                 self.getLVbehavior(runParameters=runParameters,meshname=meshname,volstep=volstep,toRunCountFolder=folderToLVbehavior)
         if folderToLVbehavior is None:
-            ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],loading_casename=self.casename+'/'+meshname)
+            ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],timetopeak=runParameters['t0'],loading_casename=self.casename+'/'+meshname)
         else:
-            ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],loading_casename=self.casename+folderToLVbehavior+'/'+meshname)
+            ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],timetopeak=runParameters['t0'],loading_casename=self.casename+folderToLVbehavior+'/'+meshname)
         cmd = "cp "+self.casename+'/'+self.meshname+'_rvflowrate.txt'+" " + self.casename+"/"+str(self.runCount)+'/'+meshname+'_rvflowrate.txt'
         os.system(cmd)
         if 'ES_time' not in runParameters:
@@ -982,7 +988,7 @@ class LVclosed:
                 ngspice_py.createLVcircuit(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters,skipVariableList=["timetopeaktension"])
             ngspice_py.simLVcircuit_align_EDvol_and_EStime(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL']*10,self.casename+"/"+str(self.runCount)+'/'+meshname+'_lvcirtable.txt',runParameters['BCL'],runParameters['ES_time'],runParameters['t0'],lvinputvar='table2dtrackrelaxphase',initLVvol=runParameters['EDV_LV'])
         return runParameters
-    def iterativeRun(self,editParameters=None,always_remesh=False,runTimeList=None):
+    def iterativeRun(self,editParameters=None,runTimeList=None,endTime=None):
         runParameters=self.defaultParameters.copy()
         if editParameters is not None:
             for key in runParameters:
@@ -995,67 +1001,66 @@ class LVclosed:
         with open(self.casename+'/'+str(self.runCount)+"/runParameters.txt", "w") as f:
                 for key, val in runParameters.items():
                     f.write("{0:s} , {1:s}\n".format(key,str(val)))
-        pressureIteration_factor=0.1
+        if min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
+            self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=True)
+        elif not(os.path.isfile(self.casename+'/'+self.meshname+'.hdf5')):
+            self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=False)
         
         displacementfile = fenics.File(self.casename+"/"+str(self.runCount)+"/deformation/u_disp.pvd")
-        activestressfile = fenics.File(self.casename+"/"+str(self.runCount)+"/activestress/stress.pvd") #CW
+        #activestressfile = fenics.File(self.casename+"/"+str(self.runCount)+"/activestress/stress.pvd") #CW
         stress_File = fenics.File(self.casename+"/"+str(self.runCount)+"/stress/_stress.pvd") #Joy Changed here
 
-        while True: #setup
-            if always_remesh or str(self.runCount)=='1' or 'Laxis_X' in editParameters or 'Laxis_Y' in editParameters or 'Laxis_Z' in editParameters or 'endo_angle' in editParameters or 'epi_angle' in editParameters:
-                if runParameters['Laxis_X'] is None or runParameters['Laxis_Y'] is None or runParameters['Laxis_Z'] is None:
-                    self.getLongAxis()
-                    runParameters['Laxis_X']=self.defaultParameters['Laxis_X']
-                    runParameters['Laxis_Y']=self.defaultParameters['Laxis_Y']
-                    runParameters['Laxis_Z']=self.defaultParameters['Laxis_Z']
-                self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'] ,epi_angle=runParameters['epi_angle'])
-            heart=lcleeHeart.heart(self.casename,self.meshname,runParameters)
-            #solver,uflforms,activeforms,t_a,dt,Cavityvol,f0,mesh_volume,mesh,comm=lcleeHeart.setupHeart(self.casename,self.meshname,runParameters)
-            
-            ########################### Fenics's Newton  #########################################################
-            heart.Cavityvol.vol = heart.uflforms.cavityvol()
-            
-            # Closed loop cycle
-            BCL = runParameters['BCL']
-            if self.LVage=='adult':
-                V_ven = runParameters['V_ven']
-                V_art = runParameters['V_art']
-                V_LA = runParameters['V_LA']
-  
-            cycle = 0.
-            t = 0
-            tstep = 0
-            heart.dt.dt = 1.
-            dt=1.
-            
-            t_array=[0]
-            LVcav_array = [heart.uflforms.cavityvol()]
-            Pcav_array = [heart.uflforms.cavitypressure()*0.0075]
-            
-            #Joy Changed from here
-            #Stress calculation 
-            cauchy1 =  heart.uflforms.Cauchy1() + heart.activeforms.cauchy()
-            cauchy = fenics.project(cauchy1,fenics.TensorFunctionSpace(heart.mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
-            cauchy.rename("cauchy_stress","cauchy_stress")
-            ###stress_File << cauchy ## wei xuan remove
+        
+        ########################### Fenics's Newton  #########################################################
 
-            ####### Loading phase for LV ####################################################
-            if self.manualVol is None:
-                startVolume=runParameters['EDV_LV']
-            elif runTimeList is None:
-                startVolume=self.manualVol(0.)
+        # Closed loop cycle
+        BCL = runParameters['BCL']
+        if self.LVage=='adult':
+            V_ven = runParameters['V_ven']
+            V_art = runParameters['V_art']
+            V_LA = runParameters['V_LA']
+  
+        cycle = 0.
+        t = 0
+        tstep = 0
+        dt=1.
+        t_array=[0]
+        
+        
+
+        ####### Loading phase for LV ####################################################
+        if self.manualVol is None:
+            startVolume=runParameters['EDV_LV']
+        elif runTimeList is None:
+            startVolume=self.manualVol(0.)
+        else:
+            startVolume=self.manualVol(runTimeList[0])
+        #if Cavityvol.vol>(1.1*runParameters['EDV_LV']):
+        # 	raise Exception('Starting cavity volume,'+str(Cavityvol.vol)+', is more than target EDV_LV,'+str(runParameters['EDV_LV']))
+        
+        
+        if runParameters['EDP_LV'] is None or self.manualVol is not None:
+            if min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
+                heart=lcleeHeart.heart(self.casename+'/'+str(self.runCount),self.meshname,runParameters)
             else:
-                startVolume=self.manualVol(runTimeList[0])
-            #if Cavityvol.vol>(1.1*runParameters['EDV_LV']):
-            # 	raise Exception('Starting cavity volume,'+str(Cavityvol.vol)+', is more than target EDV_LV,'+str(runParameters['EDV_LV']))
-            self.solveVolume(heart,startVolume)
-            
-            if runParameters['EDP_LV'] is None or self.manualVol is not None:
-                break
+                heart=lcleeHeart.heart(self.casename,self.meshname,runParameters)
+        else:
+            if min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
+        	    self.getUnloadedGeometry(editParameters=runParameters,casename=self.casename+'/'+str(self.runCount),targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],savename=self.meshname+'_unloadedmesh')
+        	    heart=lcleeHeart.heart(self.casename+'/'+str(self.runCount),self.meshname+'_unloadedmesh',runParameters)
             else:
-                ###need to edit
-            	self.getUnloadedGeometry(casename=self.casename,meshname=self.meshname,targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],savename=self.meshname+'_unloadedmesh',iterationNumber=0)
-            	heart=lcleeHeart.heart(self.casename,self.meshname+'_unloadedmesh',runParameters)
+        	    self.getUnloadedGeometry(editParameters=runParameters,savename=self.meshname+'_unloadedmesh',targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],toRunCountFolder=True)
+        	    heart=lcleeHeart.heart(self.casename,self.meshname+'_unloadedmesh',runParameters)
+        heart.dt.dt = 1.
+        self.solveVolume(heart,startVolume)
+        LVcav_array = [heart.uflforms.cavityvol()]
+        Pcav_array = [heart.uflforms.cavitypressure()*0.0075]
+        #Joy Changed from here
+        #Stress calculation 
+        cauchy1 =  heart.uflforms.Cauchy1() + heart.activeforms.cauchy()
+        cauchy = fenics.project(cauchy1,fenics.TensorFunctionSpace(heart.mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
+        cauchy.rename("cauchy_stress","cauchy_stress")
+        ###stress_File << cauchy ## wei xuan remove
         if(fenics.MPI.rank(heart.comm) == 0): #added to output the volume, stroke volume data before the while loop
             fdataPV = open(self.casename+"/"+str(self.runCount)+"/PV_.txt", "w")
             fdatals = open(self.casename+"/"+str(self.runCount)+"/ls.txt", "w")
@@ -1088,6 +1093,8 @@ class LVclosed:
         if runTimeList is not None:
             runTimeList=list(runTimeList)
             runTimeList.pop(0)
+        if endTime is None:
+            endTime = BCL*self.numofCycle
         while(cycle < self.numofCycle):
         	
         	#################################################################
@@ -1099,10 +1106,12 @@ class LVclosed:
         		break
         	else:
         		tstep =runTimeList.pop(0)
+        	if tstep>endTime:
+        		break
         	cycle = math.floor(tstep/BCL)
         	logger.info("cycle="+repr(cycle))
         	t = tstep - cycle*BCL
-        
+        	
         	if(t >= 0.0 and t < 4.0):
         		dt = 0.50
         	elif (t >= (runParameters['t0']-0.5) and t < (runParameters['t0']+0.5)):
@@ -1126,10 +1135,14 @@ class LVclosed:
         	Pcav_array.append(p_cav*0.0075)
             
             #these lines added as between the two timesteps if there is a large volume it will crash, therefore below increases volume gradually
-           
+        	heart.dt.dt=dt#runTimeList[0]-t
+        	heart.t_a.t_a=t   
+        	#heart.Cavityvol.vol =V_cav
+        	#heart.solver.solvenonlinear()
         	self.solveVolume(heart,V_cav)
-        	self.solveTa(heart,t,peaktime=runParameters['t0'])
+        	#self.solveTa(heart,t,peaktime=runParameters['t0'])
             
+        	
         	p_cav = heart.uflforms.cavitypressure()
         	V_cav = heart.uflforms.cavityvol()
 
