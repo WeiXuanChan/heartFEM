@@ -41,11 +41,12 @@ History:
                                                             -ngspice_py v2.1.0
                                                             -debug LVbehaviorRun for folderToLVbehavior=None where ngspice_py.generateLVtable use folderToLVbehavior
                                                             -debug solveTa to include changing heart.dt.dt
-  Author: w.x.chan@gmail.com         21APR2021           - v2.3.2
+  Author: w.x.chan@gmail.com         21APR2021           - v2.3.3
                                                             -ngspice_py v2.1.0
+                                                            -heartParameters v1.2.0
                                                             -debug iterativeRun to save mesh into folder and solve without incremental t_a
 '''
-_version='2.3.2'
+_version='2.3.3'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
