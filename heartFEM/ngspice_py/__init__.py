@@ -20,8 +20,13 @@ History:
                                                             -simLVcircuit v2.1.0
                                                             -generateLVtable v2.1.0
                                                             -simLVcircuit_alignEStime v2.1.0
+  Author: w.x.chan@gmail.com         12MAY2021           - v2.1.2
+                                                            -createLVcircuit v2.1.0
+                                                            -simLVcircuit v2.1.0
+                                                            -generateLVtable v2.1.2
+                                                            -simLVcircuit_alignEStime v2.1.0
 '''
-_version='2.1.0'
+_version='2.1.2'
 
 from heartFEM.ngspice_py.createLVcircuit            import *
 from heartFEM.ngspice_py.simLVcircuit               import *
