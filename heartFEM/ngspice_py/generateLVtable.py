@@ -10,6 +10,8 @@ History:
   Author: w.x.chan@gmail.com         21APR2021           - v2.1.0
   Author: w.x.chan@gmail.com         21APR2021           - v2.1.1
                                                             -debug when stackaddstr is not sorted and/or not unique
+  Author: w.x.chan@gmail.com         21APR2021           - v2.1.2
+                                                            -debug read LVtablefile before savetxt
 '''
 ########################################################################
 _version='2.1.1'
@@ -49,8 +51,7 @@ def generateLVtable(casename,period,timetopeak=None,verbose=True,stackaddstr=Non
         stackaddstr=['']
     LVtablefile = casename + "_lvcirtable.txt"
     
-    with open(LVtablefile,'r') as f:
-        lines=f.readlines()
+    
     ytime=np.loadtxt(loading_casename+"_Press_timeSpace.txt")/1000.
     
     ytime=np.round(ytime,decimals=4)
@@ -76,7 +77,8 @@ def generateLVtable(casename,period,timetopeak=None,verbose=True,stackaddstr=Non
     datatable=datatable.T
     np.savetxt(LVtablefile,datatable,fmt='%.9e')
 
-    
+    with open(LVtablefile,'r') as f:
+        lines=f.readlines()
     
     newline=['*table source\n',
              '*number of columns (x)\n',
