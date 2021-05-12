@@ -48,7 +48,6 @@ History:
   Author: w.x.chan@gmail.com         12MAY2021           - v2.3.4
                                                             -ngspice_py v2.3.4
                                                             -heartParameters v1.2.0
-                                                            -debug iterativeRun to save mesh into folder and solve without incremental t_a
 '''
 _version='2.3.4'
 import logging
