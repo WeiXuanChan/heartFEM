@@ -10,11 +10,11 @@ History:
   Author: w.x.chan@gmail.com         21APR2021           - v2.1.0
   Author: w.x.chan@gmail.com         21APR2021           - v2.1.1
                                                             -debug when stackaddstr is not sorted and/or not unique
-  Author: w.x.chan@gmail.com         12MAY2021           - v2.1.2
+  Author: w.x.chan@gmail.com         12MAY2021           - v2.3.4
                                                             -debug read LVtablefile before savetxt
 '''
 ########################################################################
-_version='2.1.2'
+_version='2.3.4'
 import logging
 logger = logging.getLogger(__name__)
 
