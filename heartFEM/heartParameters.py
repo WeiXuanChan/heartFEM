@@ -27,8 +27,11 @@ History:
   Author: w.x.chan@gmail.com         05APR2021           - Created
   Author: w.x.chan@gmail.com         26APR2021           - v1.2.0
                                                             -added endo_angle and epi_angle
+  Author: w.x.chan@gmail.com         19MAY2021           - v1.2.1
+                                                            -debug func changeDefaultParameters
+                                                            -debug when defaultParameters and defaultAge is swapped during initialization
 '''
-_version='1.2.0'
+_version='1.2.1'
 import logging
 logger = logging.getLogger(__name__)
 
@@ -48,7 +51,7 @@ defaultAdjustmentToScaling={'r_scale':1.21,'c_scale':0.27,'C_adj':1./1.33,'R_adj
 class heartParameters(dict):
     def __new__(cls, *args, **kwargs):
         return super().__new__(cls)
-    def __init__(self,defaultParameters=None,defaultAge='fetal28'):
+    def __init__(self,defaultParameters=None,defaultAge=None):
         '''
         MESH parameters:
             'topid'           #id for the base it is on top of geometry
@@ -103,6 +106,19 @@ class heartParameters(dict):
               Last character represents the components: (r) resistance, (c) capacitance, (l) inductance
                 k and b are the non-linear relation term where pressure = k*flowrate**b
         '''
+        tempAge='fetal28'
+        if isinstance(defaultParameters,str):
+            if defaultParameters[:5]=='adult' or defaultParameters[:5]=='fetal':
+                tempAge=defaultParameters
+        if not(isinstance(defaultParameters,dict)):
+            if isinstance(defaultAge,dict):
+                defaultParameters=defaultAge.copy()
+            else:
+                defaultParameters=None
+        if not(isinstance(defaultAge,str)):
+            defaultAge=tempAge
+        elif defaultAge[:5]!='adult' and defaultAge[:5]!='fetal':
+            defaultAge=tempAge
         self['topid'] = 4 #id for the base it is on top of geometry
         self['endoid'] = 2 #id for the inner surface it is on top of geometry
         self['epiid'] = 1 #id for the outer surface it is on top of geometry
@@ -336,6 +352,6 @@ class heartParameters(dict):
         if editParameters is None:
             return
         else:
-            for key in self.defaultParameters:
+            for key in self.keys():
                 if key in editParameters:
                     self[key]=editParameters[key]
