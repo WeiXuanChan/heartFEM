@@ -40,7 +40,7 @@ alvu1 %v[lvgenerator] pwl_input
 *alvu20 gnd lvvol %v(lvgenerator0) lvutabmod0
 *.model lvutabmod0 table2d (offset=0.0 gain=1 order=3 file="<<lvutablebasefile>>")
 *alvu21 lvvol timecyclic %v(lvgenerator1) lvutabmod
-*alvu22 lvvol timecyclic2 %v(lvgenerator1) lvutabmod
+*alvu22 lvvol phasetime %v(lvgenerator1) lvutabmod
 *.model lvutabmod table2d (offset=0.0 gain=1 order=3 file="<<lvutablefile>>")
 
 .if (trackrelaxphase == 1)
@@ -55,7 +55,7 @@ alvpressgrad  lvcurrentphase gnd lvtrcap
 alvtr gnd lvvol %v(lvtr) lvutabtrmod
 .model lvutabtrmod table2d (offset=0.0 gain=1 order=3 file="<<lvtrtablefile>>")
 Blvphase lvphase gnd V = max(0,min(1,v(lvcurrentphase)))
-Btime2 timecyclic2 gnd V =  activepeaktime + v(lvtr) * (1-v(lvphase))
+Btime2 phasetime gnd V =  activepeaktime + v(lvtr) * (1-v(lvphase))
 
 adgnd [0] [dgnd] adc_dgnd
 .model adc_dgnd adc_bridge(in_low = -2 in_high = -1)
@@ -69,6 +69,8 @@ alvcontract dgnd dgnd dgnd rise0 fall0 isrise isfall setresetflop
 .model setresetflop d_srff(clk_delay = 13.0e-9 set_delay = 25.0e-9 reset_delay = 27.0e-9 ic = 0 rise_delay = 10.0e-9 fall_delay = 3e-9)
 abridge1 [isrise] [isriseanalog] dac1
 .model dac1 dac_bridge(out_low = 0 out_high = 1 out_undef = 0 input_load = 5.0e-12 t_rise = 50e-9 t_fall = 20e-9)
+.else
+Vpassphasetime phasetime timecyclic dc 0
 .endif
 
 Etime timecyclic gnd vol = 'manmod(TIME)'
@@ -183,6 +185,6 @@ set controlswait
 set filetype=ascii
 set wr_vecnames
 run
-wrdata <<outfile>> v(lv) v(lvvol) v(la) v(rv) v(ra) v(pa1) v(aa) i(Vlvprobe)
+wrdata <<outfile>> v(lv) v(lvvol) v(la) v(rv) v(ra) v(pa1) v(aa) i(Vlvprobe) v(phasetime)
 .endc 
 .end
