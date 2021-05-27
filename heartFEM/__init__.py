@@ -54,8 +54,12 @@ History:
                                                             - added func getphaseFromFile and setManualPhaseTimeFile
                                                             - added manualPhaseTimeInput and setHeart to function: iterativeRun
                                                             - added 'self.manualVol=self.getVolumeFromFile' to setManualvolFile
+  Author: w.x.chan@gmail.com         27MAY2021           - v2.4.1
+                                                            -ngspice_py v2.4.0
+                                                            -heartParameters v1.2.0
+                                                            - debug iterativeRun with manualPhaseTimeInput=True
 '''
-_version='2.4.0'
+_version='2.4.1'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
@@ -1114,7 +1118,7 @@ class LVclosed:
         heart.dt.dt = 1.
         if manualPhaseTimeInput and self.manualPhaseTime is not None:
             if runTimeList is None:
-                heart.t_a.t_a=runTimeList
+                heart.t_a.t_a=0.
             else:
                 heart.t_a.t_a=self.manualPhaseTime(runTimeList[0])
         self.solveVolume(heart,startVolume)
