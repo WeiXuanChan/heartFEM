@@ -31,8 +31,14 @@ History:
                                                             -generateLVtable v2.3.4
                                                             -simLVcircuit_alignEStime v2.1.0
                                                             -LV.cir updated to include output of phaseTime
+  Author: w.x.chan@gmail.com         31MAY2021           - v2.5.0
+                                                            -createLVcircuit v2.1.0
+                                                            -simLVcircuit v2.1.0
+                                                            -generateLVtable v2.3.4
+                                                            -simLVcircuit_alignEStime v2.1.0
+                                                            -LV.cir debuged for track phase mode
 '''
-_version='2.4.0'
+_version='2.5.0'
 
 from heartFEM.ngspice_py.createLVcircuit            import *
 from heartFEM.ngspice_py.simLVcircuit               import *
