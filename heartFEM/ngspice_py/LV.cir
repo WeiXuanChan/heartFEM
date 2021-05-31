@@ -45,30 +45,18 @@ alvu1 %v[lvgenerator] pwl_input
 
 .if (trackrelaxphase == 1)
 Bestphase lvestphase gnd V = v(timecyclic)/activepeaktime
-Blvrisecurrent gnd lvcurrentphase I =  (v(isriseanalog)>0.5 ? (v(lvcurrentphase) >= 0.99 ? (1-v(lvcurrentphase))/0.01*v(lvrisetemp) : v(lvrisetemp) ) : 0)
-Blvrisetemp lvrisetemp gnd V = (v(lvcurrentphase) <= v(lvestphase) ? 1/activepeaktime : v(lvestphase)/activepeaktime/v(lvcurrentphase))
-Blvfallcurrent lvcurrentphase gnd I =  v(lvcurrentphase) <= 0.01 ? v(lvcurrentphase)/0.01*v(lvfalltemp) : v(lvfalltemp)
-Blvfalltemp lvfalltemp gnd V = v(isriseanalog)>0.5 ? (v(lvcurrentphase) <= v(lvestphase) ? 0 : (v(lvcurrentphase)-v(lvestphase))/v(lvtr)/v(lvcurrentphase)) : 1/v(lvtr)
+Blvrisecurrent gnd lvcurrentphase I =  ((v(timecyclic) <= activepeaktime) ? (v(lvcurrentphase) >= (1 - (3 * <<stepTime>> * v(lvrisetemp)))  ? (1-v(lvcurrentphase))/(3 * <<stepTime>> * v(lvrisetemp))*v(lvrisetemp) : v(lvrisetemp) ) : 0)
+Blvrisetemp lvrisetemp gnd V = 1/activepeaktime*10
+Blvfallcurrent lvcurrentphase gnd I = (v(timecyclic) < activepeaktime) ? 0 : v(lvfalltemp)
+Blvfalltemp lvfalltemp gnd V =  1/v(lvtr)
 
 alvpressgrad  lvcurrentphase gnd lvtrcap
 .model lvtrcap capacitor (c=1 ic=0)
 alvtr gnd lvvol %v(lvtr) lvutabtrmod
 .model lvutabtrmod table2d (offset=0.0 gain=1 order=3 file="<<lvtrtablefile>>")
 Blvphase lvphase gnd V = max(0,min(1,v(lvcurrentphase)))
-Btime2 phasetime gnd V =  activepeaktime + v(lvtr) * (1-v(lvphase))
+Btime2 phasetime gnd V =  (v(timecyclic) > activepeaktime) ? (activepeaktime + v(lvtr) * (1-v(lvcurrentphase))) : v(timecyclic)
 
-adgnd [0] [dgnd] adc_dgnd
-.model adc_dgnd adc_bridge(in_low = -2 in_high = -1)
-abridge [timecyclic] [start0] adc1
-.model adc1 adc_bridge(in_low = 1m in_high = 1.000001m)
-ainvert start0 rise0 inv1
-.model inv1 d_inverter(rise_delay = 0.5e-9 fall_delay = 0.3e-9 input_load = 0.5e-12)
-abridge2 [lvcurrentphase] [fall0] adc_buff2
-.model adc_buff2 adc_bridge(in_low = 0.999999998 in_high = 0.999999999)
-alvcontract dgnd dgnd dgnd rise0 fall0 isrise isfall setresetflop
-.model setresetflop d_srff(clk_delay = 13.0e-9 set_delay = 25.0e-9 reset_delay = 27.0e-9 ic = 0 rise_delay = 10.0e-9 fall_delay = 3e-9)
-abridge1 [isrise] [isriseanalog] dac1
-.model dac1 dac_bridge(out_low = 0 out_high = 1 out_undef = 0 input_load = 5.0e-12 t_rise = 50e-9 t_fall = 20e-9)
 .else
 Vpassphasetime phasetime timecyclic dc 0
 .endif
