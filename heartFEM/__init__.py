@@ -58,8 +58,12 @@ History:
                                                             -ngspice_py v2.4.0
                                                             -heartParameters v1.2.0
                                                             - debug iterativeRun with manualPhaseTimeInput=True
+  Author: w.x.chan@gmail.com         31MAY2021           - v2.5.0
+                                                            -ngspice_py v2.5.0
+                                                            -heartParameters v1.2.0
+                                                            - added inverse Heart to unloaded geometry with deformation gradient
 '''
-_version='2.4.1'
+_version='2.5.0'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
@@ -124,10 +128,13 @@ def kabsch(from_a,to_b):
     R=vh.T.dot(np.array([[1,0,0,],[0,1,0],[0,0,d]]).dot(u.T))
     u=centroid_Q-R.dot(centroid_P.reshape((-1,1))).reshape(-1)
     return (R,u)
-def pointsMeansqDiff_kabsch(from_a,to_b):
+def pointsMeansqDiff_kabsch(from_a,to_b,averageFunc=None):
     R,u=kabsch(from_a,to_b)
     new_a=R.dot(from_a.T).T+u.reshape((1,-1))
-    return np.sum((new_a-to_b)**2.,axis=1).mean()
+    if averageFunc is None:
+        return np.mean(np.sum((new_a-to_b)**2.,axis=1))
+    else:
+        return averageFunc(np.sum((new_a-to_b)**2.,axis=1))
 class LVclosed:
     def __new__(cls, *args, **kwargs):
         return super().__new__(cls)
@@ -825,6 +832,76 @@ class LVclosed:
         newcoords[:,3]=1.
         coords=transform_mat.dot(newcoords.T)[:3,:].T
         return coords
+    def adjustMeshToPressureWithInverse(self,casename,meshname,targetPressure,savename=None,softAdjust=float('inf'),iterationNumber=float('inf'),initHeart=None,prevDeform=None,saveFolder='',tolerance=10.**-4.):
+        #set usePrevious to False or 0 to not use previous mesh for deformation, set True to use previous mesh only and set a number to use previous mesh a number of times is it doesnt converge
+        runParameters=self.defaultParameters
+        refHeart=lcleeHeart.heart(casename,meshname,runParameters)
+        
+        targetVolume=refHeart.uflforms.cavityvol()
+        logging.info('Target Volume = '+repr(targetVolume)+', target pressure = '+repr(targetPressure))
+        targetMeshCoords=refHeart.mesh.coordinates()[:].copy()
+        self.solvePressure(refHeart,targetPressure,voladj=0.05)
+        finv=fenics.grad(refHeart.w.sub(0))+fenics.Identity(refHeart.u.geometric_dimension())
+        
+        heart=lcleeHeart.heart(casename,meshname,runParameters,inverseHeart=True)
+        heart.invF.vector()[:]=fenics.project(finv,refHeart.invFspace).vector()[:].copy()
+
+        heart.solver.solvenonlinear()
+        deform=fenics.project(heart.w.sub(0),heart.displacementSpace)
+        deform_vectors=deform.vector()[:].copy()
+        fenics.ALE.move(heart.mesh,deform)
+        self.savehdf5(heart,casename,meshname,'tempadjmesh_'+meshname,saveFolder=saveFolder)
+        
+        maxadjustmentsq=None
+        newheartVol=heart.uflforms.cavityvol()
+        prevHeartVol=heart.uflforms.cavityvol()
+        
+        refHeart=lcleeHeart.heart(casename+saveFolder,'tempadjmesh_'+meshname,runParameters)
+        logging.info('New start Volume = '+repr(refHeart.uflforms.cavityvol()))
+        prevMeshCoords=refHeart.mesh.coordinates()[:].copy()
+        self.solvePressure(refHeart,targetPressure,voladj=0.05)
+        meanSqError=pointsMeansqDiff_kabsch(refHeart.mesh.coordinates()[:],targetMeshCoords)
+        logging.info('meanSqError= '+repr(meanSqError))
+        count=0
+        while abs(refHeart.uflforms.cavitypressure()*0.0075/targetPressure-1)>tolerance or abs(refHeart.uflforms.cavityvol()/targetVolume-1)>tolerance:##alternate convergence criteria##(np.mean((heart.mesh.coordinates()[:]-du.vector()[:].reshape((-1,3))-refHeart.mesh.coordinates()[:])**2.).max()**1.5/refHeart.uflforms.cavityvol())<10.**-6.:
+            if count>=iterationNumber:
+                logging.warning('Maximum Iteration reached for adjustMeshToPressure')
+                break
+            new_deform_vectors=fenics.project(refHeart.w.sub(0),refHeart.displacementSpace).vector()[:]
+            originalHeart=lcleeHeart.heart(casename,meshname,runParameters)
+            inv_deform=fenics.project(originalHeart.w.sub(0),originalHeart.displacementSpace)
+            inv_deform.vector()[:]=deform_vectors+new_deform_vectors
+            finv=fenics.grad(inv_deform)+fenics.Identity(originalHeart.u.geometric_dimension())
+            
+            
+            heart=lcleeHeart.heart(casename+saveFolder,'tempadjmesh_'+meshname,runParameters,inverseHeart=True)
+            heart.invF.vector()[:]=fenics.project(finv,originalHeart.invFspace).vector()[:].copy()
+            heart.solver.solvenonlinear()
+            deform=fenics.project(heart.w.sub(0),heart.displacementSpace)
+            deform_vectors=deform_vectors+deform.vector()[:].copy()
+            
+            deform=fenics.project(originalHeart.w.sub(0),originalHeart.displacementSpace)
+            deform.vector()[:]=deform_vectors.copy()
+            fenics.ALE.move(originalHeart.mesh,deform)
+            self.savehdf5(originalHeart,casename,meshname,'tempadjmesh_'+meshname,saveFolder=saveFolder)
+            
+            
+            refHeart=lcleeHeart.heart(casename+saveFolder,'tempadjmesh_'+meshname,runParameters)
+            logging.info('New start Volume = '+repr(refHeart.uflforms.cavityvol()))
+            self.solvePressure(refHeart,targetPressure,voladj=0.05)
+            meanSqError=pointsMeansqDiff_kabsch(refHeart.mesh.coordinates()[:],targetMeshCoords)
+            logging.info('meanSqError= '+repr(meanSqError))
+            maxcoordchange=pointsMeansqDiff_kabsch(refHeart.mesh.coordinates()[:],prevMeshCoords,averageFunc=np.max)**1.5
+            prevMeshCoords=refHeart.mesh.coordinates()[:].copy()
+            count+=1
+            if (maxcoordchange/targetVolume)<10**-8:
+                break
+            else:
+                logging.info('max coord change ratio= '+repr(maxcoordchange/targetVolume))
+        logging.info('Final heart volume ='+repr(refHeart.uflforms.cavityvol()))
+        if savename is not None:
+            self.savehdf5(refHeart,casename,meshname,savename,saveFolder=saveFolder)
+        return refHeart
     def getUnloadedGeometry(self,editParameters=None,casename=None,meshname=None,targetPressure=None,targetVolume=None,tryPressureRatio=0.2,targetMeshCoords=None,savename=None,iterationNumber=0,toRunCountFolder=False,inverseHeart=False):
         #when targetMeshCoords is not None, set target pressure as the maximum pressure to try
         #= mesh.coordinates()[:] at target volume
@@ -864,9 +941,7 @@ class LVclosed:
             tryPressure=tryPressureRatio*targetPressure
             adjtryPressure=min(tryPressureRatio*0.33,(1-tryPressureRatio)*0.33,0.1)
         if inverseHeart:
-            heart=lcleeHeart.heart(casename,meshname,runParameters,inverseHeart=inverseHeart)
-            self.solvePressure(heart,-tryPressure,voladj=0.05)
-            fenics.ALE.move(heart.mesh,heart.w.sub(0))
+            heart=self.adjustMeshToPressureWithInverse(casename,meshname,tryPressure,savename=savename,iterationNumber=iterationNumber,saveFolder=toRunCountFolder)
         else:
             heart=self.adjustMeshToPressure(casename,meshname,tryPressure,savename=savename,usePrevious=0,iterationNumber=iterationNumber,saveFolder=toRunCountFolder)
         self.savehdf5(heart,casename,meshname,'tempadjmesh_'+meshname,saveFolder=toRunCountFolder)
@@ -900,9 +975,7 @@ class LVclosed:
                 tryPressure=tryPressureRatio*targetPressure
                 logging.info('Trying Pressure '+repr(tryPressure))
             if inverseHeart:
-                heart=lcleeHeart.heart(casename,meshname,runParameters,inverseHeart=inverseHeart)
-                self.solvePressure(heart,-tryPressure,voladj=0.05)
-                fenics.ALE.move(heart.mesh,heart.w.sub(0))
+                heart=self.adjustMeshToPressureWithInverse(casename,meshname,tryPressure,savename=savename,iterationNumber=iterationNumber,saveFolder=toRunCountFolder)
             else:
                 heart=self.adjustMeshToPressure(casename,meshname,tryPressure,savename=savename,usePrevious=0,iterationNumber=iterationNumber,saveFolder=toRunCountFolder,tolerance=10.**-3)
             self.savehdf5(heart,casename,meshname,'tempadjmesh_'+meshname,saveFolder=toRunCountFolder)
