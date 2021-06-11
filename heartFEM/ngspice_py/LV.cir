@@ -1,3 +1,5 @@
+*version 3.0.0
+
 .title LV full circuit
 
 .PARAM PI = 3.14159265359
@@ -8,6 +10,8 @@
 .PARAM freq3 = 3 / heartperiod
 .PARAM freq4 = 4 / heartperiod
 .PARAM trackrelaxphase = 0
+.PARAM lvregurgitation = <<lvregurger>>
+.PARAM rvregurgitation = <<rvregurger>>
 
 .func manmod(shorttime) {shorttime - floor(shorttime / heartperiod) * heartperiod}
 .func disfrompeak(xtime,peaktime,width) {min( abs( manmod(xtime) - peaktime) , heartperiod - abs( manmod(xtime) - peaktime))}
@@ -100,8 +104,20 @@ Brvrvvalv  rvvalvp2 rvvalv V=' <<rvrvvalvk>> * ( i(Vrvrvvalv) ^2 )^( <<rvrvvalvb
 
 
 alv   lvvalv   aa    valve
+.if (lvregurgitation > 0)
+Rlvregurgitation lv lvregurp1 r = lvregurgitation
+Vlvregurgitation lvregurp1 lavalvp1 dc 0
+.else
+Vlvregurgitation lvregurp1 gnd dc 0
+.endif
 ala   lavalv   lv    valve
 arv   rvvalv   pa1   valve
+.if (rvregurgitation > 0)
+Rrvregurgitation rv rvregurp1 r = rvregurgitation
+Vrvregurgitation rvregurp1 rvvalvp1 dc 0
+.else
+Vrvregurge rvregurp1 gnd dc 0
+.endif
 ara   ravalv   rv    valve
 afo   fovalv   la    valve
 

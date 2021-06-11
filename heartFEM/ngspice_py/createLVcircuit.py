@@ -8,9 +8,11 @@ History:
   Author: w.x.chan@gmail.com         08MAR2021           - v1.0.0
   Author: w.x.chan@gmail.com         13APR2021           - v2.0.0
   Author: w.x.chan@gmail.com         21APR2021           - v2.1.0
+  Author: w.x.chan@gmail.com         10Jun2021           - v3.0.0
+                                                              -added lvregurger and rvregurger for regurgitation on lv and rv to la and ra respectively
 '''
 ########################################################################
-_version='2.1.0'
+_version='3.0.0'
 import logging
 logger = logging.getLogger(__name__)
 
@@ -66,6 +68,9 @@ def createLVcircuit(casename,paramDict,skipVariableList=None,verbose=True):
             if side+tempstr not in skipVariableList:
                 cmd = "sed -i.bak s/'<<"+side+tempstr+">>'/'" + '{:10.6f}'.format(paramDict[side+tempstr]) + "'/g " + cirfilename
                 os.system(cmd)
+        if side+"vregurger" not in skipVariableList:
+            cmd = "sed -i.bak s/'<<"+side+"vregurger>>'/'" + paramDict['rvfunc'] + "'/g " + cirfilename
+            os.system(cmd)
     if "rvfunc" not in skipVariableList:
         cmd = "sed -i.bak s/'<<rvfunc>>'/'" + paramDict['rvfunc'] + "'/g " + cirfilename
         os.system(cmd)
