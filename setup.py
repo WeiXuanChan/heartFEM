@@ -5,6 +5,7 @@ setup(
   include_package_data=True,   
   package_data={
         'ngspice_py':['*']
+        'lcleeHeart':['*']
         },
   version = '3.0.0',      # Start with a small number and increase it with every change you make
   license='MIT',        # Chose a license from here: https://help.github.com/articles/licensing-a-repository
