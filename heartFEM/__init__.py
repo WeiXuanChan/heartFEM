@@ -62,8 +62,12 @@ History:
                                                             -ngspice_py v2.5.0
                                                             -heartParameters v1.2.0
                                                             - added inverse Heart to unloaded geometry with deformation gradient
+  Author: w.x.chan@gmail.com         09JUN2021           - v3.0.0
+                                                            -ngspice_py v3.0.0
+                                                            -heartParameters v3.0.0
+                                                            -lcleeHeart v3.0.0
 '''
-_version='2.5.0'
+_version='3.0.0'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
@@ -90,7 +94,7 @@ from heartFEM import ngspice_py
 from heartFEM import heartParameters
 from mpi4py import MPI as pyMPI
 try:
-    import lcleeHeart
+    from heartFEM import lcleeHeart
 except Exception as e:
     logger.warning('Unable to load Module "lcleeHeart".')
     logger.warning(repr(e))
@@ -902,7 +906,7 @@ class LVclosed:
         if savename is not None:
             self.savehdf5(refHeart,casename,meshname,savename,saveFolder=saveFolder)
         return refHeart
-    def getUnloadedGeometry(self,editParameters=None,casename=None,meshname=None,targetPressure=None,targetVolume=None,tryPressureRatio=0.2,targetMeshCoords=None,savename=None,iterationNumber=0,toRunCountFolder=False,inverseHeart=False):
+    def getUnloadedGeometry(self,editParameters=None,casename=None,meshname=None,targetPressure=None,targetVolume=None,tryPressureRatio=0.2,targetMeshCoords=None,savename=None,iterationNumber=0,toRunCountFolder=False,inverseHeart=True):
         #when targetMeshCoords is not None, set target pressure as the maximum pressure to try
         #= mesh.coordinates()[:] at target volume
         runParameters=self.defaultParameters.copy()
@@ -1028,7 +1032,7 @@ class LVclosed:
         else:
             editParameters={}
         self.getLVbehavior(runParameters=runParameters,meshname=meshname,meshFolder=meshFolder,volstep=volstep,extendVol=extendVol,minESV=minESV,maxEDV=maxEDV,saveaddstr=saveaddstr,voladj=voladj,starttime=float(int(runParameters['t0'])),endtime=float(int(runParameters['t0'])),toRunCountFolder=toRunCountFolder)
-    def unloadedGeometryRun(self,editParameters=None,inverseHeart=False):
+    def unloadedGeometryRun(self,editParameters=None,inverseHeart=True):
         runParameters=self.defaultParameters.copy()
         if editParameters is not None:
             for key in runParameters:
@@ -1055,7 +1059,8 @@ class LVclosed:
         fenics.ALE.move(heart.mesh,heart.w.sub(0))
         self.savehdf5(heart,self.casename+"/"+str(self.runCount),self.meshname+'_unloadedmesh',self.meshname+'_unloadedmesh_at'+self.meshname)
         return runParameters
-    def LVbehaviorRun(self,editParameters=None,unloadGeo=False,folderToLVbehavior=None):
+    def LVbehaviorRun(self,editParameters=None,unloadGeo=True,folderToLVbehavior=None):
+        #if using displacement to get unloaded geometry, set unloadGeo='displacement'
         if isinstance(folderToLVbehavior,str):
             if folderToLVbehavior[0]!='/':
                 folderToLVbehavior='/'+folderToLVbehavior
@@ -1080,14 +1085,23 @@ class LVclosed:
             meshname=self.meshname
         
         if unloadGeo:
+            if unloadGeo=='displacement':
+                inverseHeart=False
+            else:
+                inverseHeart=True
             if folderToLVbehavior is not None and min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])>0:
                 if not(os.path.isfile(self.casename+folderToLVbehavior+'/'+self.meshname+'_unloadedmesh.hdf5')):
-                    self.getUnloadedGeometry(editParameters=runParameters,savename=self.meshname+'_unloadedmesh',targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],toRunCountFolder=folderToLVbehavior)
+                    self.getUnloadedGeometry(editParameters=runParameters,savename=self.meshname+'_unloadedmesh',targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],toRunCountFolder=folderToLVbehavior,inverseHeart=inverseHeart)
             elif min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
-                self.getUnloadedGeometry(editParameters=runParameters,casename=self.casename+'/'+str(self.runCount),targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],savename=self.meshname+'_unloadedmesh')
+                self.getUnloadedGeometry(editParameters=runParameters,casename=self.casename+'/'+str(self.runCount),targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],savename=self.meshname+'_unloadedmesh',inverseHeart=inverseHeart)
             else:
-                self.getUnloadedGeometry(editParameters=runParameters,savename=self.meshname+'_unloadedmesh',targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],toRunCountFolder=True)
-        volstep=runParameters['ESV_LV']*0.9*(runParameters['EDV_LV']/runParameters['ESV_LV']*1.1/0.9)**(np.linspace(0,1,num=50))[::-1]
+                self.getUnloadedGeometry(editParameters=runParameters,savename=self.meshname+'_unloadedmesh',targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],toRunCountFolder=True,inverseHeart=inverseHeart)
+        volstep_ej=(runParameters['EDV_LV']-runParameters['ESV_LV'])/runParameters['EDV_LV']
+        if volstep_ej<0.6:
+            volstep_esv=0.4*runParameters['EDV_LV']
+        else:
+            volstep_esv=runParameters['ESV_LV']
+        volstep=volstep_esv*0.9*(runParameters['EDV_LV']/volstep_esv*1.1/0.9)**(np.linspace(0,1,num=50))[::-1]
         volstep=np.concatenate((volstep[:1]*1.3,volstep[:1]*1.1,volstep,volstep[-1:]*0.9,volstep[-1:]*0.7),axis=0)
         if folderToLVbehavior is None or min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<=1:
             if min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
@@ -1423,7 +1437,7 @@ class cost_function:
                          'PulmonaryArteryPressure':'Ppa1',
                          'AscendingAortaPressure':'Paa',
                          'DiastolicMeshCoordinates':'coordsDiaMesh',
-                         'SystolicMeshCoordinates':'coordsSysMesh'                         
+                         'SystolicMeshCoordinates':'coordsSysMesh'                        
                          }
     def __call__(self,folderName,runParameters):
         f=0.
