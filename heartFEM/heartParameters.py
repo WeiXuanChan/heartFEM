@@ -30,6 +30,8 @@ History:
   Author: w.x.chan@gmail.com         19MAY2021           - v1.2.1
                                                             -debug func changeDefaultParameters
                                                             -debug when defaultParameters and defaultAge is swapped during initialization
+  Author: w.x.chan@gmail.com         19MAY2021           - v3.0.0
+                                                            -added reguritation for heart chambers
 '''
 _version='1.2.1'
 import logging
@@ -274,6 +276,9 @@ class heartParameters(dict):
             self['rvrvvalvb'] =2.
             self['lalavalvb'] =2.
             self['lvlvvalvb'] =2.
+            
+            self['lvregurger']=-1
+            self['rvregurger']=-1
             if len(modelString)>5:
                 self.scaleWinkesselwithAge(float(modelString[5:]))
     def getParameterRelation(self,parameterStringList,return_integer=True):
