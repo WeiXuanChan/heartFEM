@@ -66,6 +66,9 @@ History:
                                                             -ngspice_py v3.0.0
                                                             -heartParameters v3.0.0
                                                             -lcleeHeart v3.0.0
+                                                            -added readRunParameters
+                                                            -added writeRunParameters
+                                                            -added option to continue getLVbehavior if isinstance(runParameters,str)
 '''
 _version='3.0.0'
 import logging
@@ -518,6 +521,13 @@ class LVclosed:
             meshFolder='/'+meshFolder
         if runParameters is None:
             runParameters=self.defaultParameters
+        elif isinstance(runParameters,str):
+            if runParameters[0]!='/':
+                runParameters='/'+runParameters
+            runParameters=self.readRunParameters(self.casename+runParameters)
+            trycontinueprevious=True
+        else:
+            trycontinueprevious=False
         if meshname is None:
             meshname=self.meshname
         heart=lcleeHeart.heart(self.casename+meshFolder,meshname,runParameters)
@@ -525,12 +535,13 @@ class LVclosed:
         
         ########################### Fenics's Newton  #########################################################
         heart.Cavityvol.vol = heart.uflforms.cavityvol()
+
         
         # Closed loop cycle
         BCL = runParameters['BCL']
         
         
-        #######set volume solve space#############
+        #######set volume solve space#############     
         EDV=runParameters['EDV_LV']
         if maxEDV is None:
             maxEDV=EDV*(1+extendVol)
@@ -580,8 +591,21 @@ class LVclosed:
         logger.info('========START============')
         press_volTime_base=np.zeros(len(volumeSpace))
         press_volTime=np.zeros((len(volumeSpace),len(timeSpace)))
-        maxtimeind=0
-        for curr_volN in range(len(volumeSpace)):
+        startVolumeIndex=0
+        
+        if trycontinueprevious:
+            try:
+                volumeSpace2=np.loadtxt(self.casename+toRunCountFolder+"/"+meshname+"_Press_volumeSpace"+saveaddstr+".txt")
+                timeSpace2=np.loadtxt(self.casename+toRunCountFolder+"/"+meshname+"_Press_timeSpace"+saveaddstr+".txt")
+                if np.all(np.abs(volumeSpace2-volumeSpace)<(runParameters['EDV_LV']/1000.)) and np.all(np.abs(timeSpace2-timeSpace)<0.01):
+                    press_volTime=np.loadtxt(self.casename+toRunCountFolder+"/"+meshname+"_Press_VolTime"+saveaddstr+".txt")
+                    press_volTime_base=np.loadtxt(self.casename+toRunCountFolder+"/"+meshname+"_Press_VolTime_base"+saveaddstr+".txt")
+                    startVolumeIndex=np.nonzero(press_volTime_base==0.)[0][0]
+                    volumeSpace=volumeSpace2
+                    timeSpace=timeSpace2
+            except:
+                pass
+        for curr_volN in range(startVolumeIndex,len(volumeSpace)):
             if curr_volN==0 or len(timeSpace)>1:
                 heart=lcleeHeart.heart(self.casename+meshFolder,meshname,runParameters)
             press_volTime_temp=[]
@@ -601,8 +625,6 @@ class LVclosed:
                         samePressure=0
                     if samePressure>1:
                         break
-            if len(press_volTime_temp)>maxtimeind:
-                maxtimeind=len(press_volTime_temp)
             press_volTime_base[curr_volN]=min(press_volTime_temp[-1],press_volTime_temp[0])
             press_volTime[curr_volN,:len(press_volTime_temp)]=np.array(press_volTime_temp)-press_volTime_base[curr_volN]
             if len(timeSpace)==1:
@@ -614,8 +636,7 @@ class LVclosed:
                     np.savetxt(self.casename+toRunCountFolder+"/"+meshname+"_Press_VolTime_base"+saveaddstr+".txt",press_volTime_base)
                 else:
                     np.savetxt(self.casename+toRunCountFolder+"/"+meshname+"_"+volPressStr+saveaddstr+".txt",volPress,header="Volume, Pressure")
-        # press_volTime=press_volTime[:,:maxtimeind]
-        #timeSpace=timeSpace[:maxtimeind]
+
         if(fenics.MPI.rank(heart.comm) == 0):
             if len(timeSpace)>1:
                 np.savetxt(self.casename+toRunCountFolder+"/"+meshname+"_Press_VolTime"+saveaddstr+".txt",np.array(press_volTime),header='rowVolm: '+str(volumeSpace)+'\ncolTime: '+str(timeSpace))
@@ -999,7 +1020,42 @@ class LVclosed:
                 break
         self.savehdf5(heart,casename,meshname,savename,saveFolder=toRunCountFolder)
         return heart
-    
+    def writeRunParameters(self,folder,runParameters):
+        os.makedirs(folder,exist_ok=True)
+        with open(folder+"/runParameters.txt", "w") as f:
+            for key, val in runParameters.items():
+                f.write("{0:s} , {1:s}\n".format(key,str(val)))
+    def decodeStringValue(self,strVal):
+        if strVal[-1]=='\n':
+            strVal=strVal[:-1]
+        while strVal[-1]==' ':
+            strVal=strVal[:-1]
+        while strVal[0]==' ':
+            strVal=strVal[1:]
+        if strVal == 'None':
+            return None
+        elif strVal[0]=='[' and strVal[0]==']':
+            temp=strVal.split(', ')
+            for n in range(len(temp)):
+                temp[n]=self.decodeStringValue(temp[n])
+            return temp
+        else:
+            try:
+                temp=int(strVal)
+            except:
+                try:
+                    temp=float(strVal)
+                except:
+                    temp=strVal
+            return temp
+    def readRunParameters(self,folder):
+        runParameters={}
+        with open(folder+"/runParameters.txt", "w") as f:
+            lines=f.readlines()
+        for line in lines:
+            temp=line.split(sep=' , ')
+            runParameters[temp[0]]=self.decodeStringValue(temp[1])
+        return runParameters
     def __call__(self,editParameters=None,**kwargs):
         if self.defaultRun_kwargs is None:
             run_kwargs={}
@@ -1040,10 +1096,7 @@ class LVclosed:
                     runParameters[key]=editParameters[key]
         else:
             editParameters={}
-        os.makedirs(self.casename+"/"+str(self.runCount),exist_ok=True)
-        with open(self.casename+'/'+str(self.runCount)+"/runParameters.txt", "w") as f:
-                for key, val in runParameters.items():
-                    f.write("{0:s} , {1:s}\n".format(key,str(val)))
+        self.writeRunParameters(self.casename+"/"+str(self.runCount),runParameters)
         #if self.runCount<=4:
         #    return runParameters
         self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=True)
@@ -1071,10 +1124,7 @@ class LVclosed:
                     runParameters[key]=editParameters[key]
         else:
             editParameters={}
-        os.makedirs(self.casename+"/"+str(self.runCount),exist_ok=True)
-        with open(self.casename+'/'+str(self.runCount)+"/runParameters.txt", "w") as f:
-            for key, val in runParameters.items():
-                f.write("{0:s} , {1:s}\n".format(key,str(val)))
+        self.writeRunParameters(self.casename+"/"+str(self.runCount),runParameters)
         if min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
             self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=True)
         elif not(os.path.isfile(self.casename+'/'+self.meshname+'.hdf5')):
@@ -1142,11 +1192,8 @@ class LVclosed:
                     runParameters[key]=editParameters[key]
         else:
             editParameters={}
-        os.makedirs(self.casename+"/"+str(self.runCount),exist_ok=True)
+        self.writeRunParameters(self.casename+"/"+str(self.runCount),runParameters)
         os.makedirs(self.casename+"/"+str(self.runCount)+"/stress",exist_ok=True)
-        with open(self.casename+'/'+str(self.runCount)+"/runParameters.txt", "w") as f:
-                for key, val in runParameters.items():
-                    f.write("{0:s} , {1:s}\n".format(key,str(val)))
         if min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
             self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=True)
         elif not(os.path.isfile(self.casename+'/'+self.meshname+'.hdf5')):
