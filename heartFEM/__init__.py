@@ -69,6 +69,8 @@ History:
                                                             -added readRunParameters
                                                             -added writeRunParameters
                                                             -added option to continue getLVbehavior if isinstance(runParameters,str)
+                                                            -debug generateLVtable in LVbehaviorRun when folderToLVbehavior is None
+                                                            - added save last cycle of circuit results in LVbehaviorRun
 '''
 _version='3.0.0'
 import logging
@@ -1050,7 +1052,7 @@ class LVclosed:
             return temp
     def readRunParameters(self,folder):
         runParameters={}
-        with open(folder+"/runParameters.txt", "w") as f:
+        with open(folder+"/runParameters.txt", "r") as f:
             lines=f.readlines()
         for line in lines:
             temp=line.split(sep=' , ')
@@ -1166,7 +1168,7 @@ class LVclosed:
             else:
                 self.getLVbehavior(runParameters=runParameters,meshname=meshname,volstep=volstep,toRunCountFolder=folderToLVbehavior)
         if folderToLVbehavior is None:
-            ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],timetopeak=runParameters['t0'],loading_casename=self.casename+'/'+meshname)
+            ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],timetopeak=runParameters['t0'],loading_casename=self.casename+"/"+str(self.runCount)+'/'+meshname)
         else:
             ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],timetopeak=runParameters['t0'],loading_casename=self.casename+folderToLVbehavior+'/'+meshname)
         cmd = "cp "+self.casename+'/'+self.meshname+'_rvflowrate.txt'+" " + self.casename+"/"+str(self.runCount)+'/'+meshname+'_rvflowrate.txt'
@@ -1180,6 +1182,14 @@ class LVclosed:
             else:
                 ngspice_py.createLVcircuit(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters,skipVariableList=["timetopeaktension"])
             ngspice_py.simLVcircuit_align_EDvol_and_EStime(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL']*10,self.casename+"/"+str(self.runCount)+'/'+meshname+'_lvcirtable.txt',runParameters['BCL'],runParameters['ES_time'],runParameters['t0'],lvinputvar='table2dtrackrelaxphase',initLVvol=runParameters['EDV_LV'])
+        cir_results=np.loadtxt(self.casename+"/"+str(self.runCount)+'/'+'circuit_results.txt',skiprows=1)
+        for n in range(0,cir_results.shape[1],2):
+            cir_results[:,n]*=1000. #set to ms
+        while cir_results[-1,0]>=(2.*runParameters['BCL']):
+            cir_results[:,0]-=runParameters['BCL']
+        cir_results=cir_results[cir_results[:,0]>=0]
+        cir_results=cir_results[cir_results[:,0]<runParameters['BCL']]
+        np.savetxt(self.casename+"/"+str(self.runCount)+'/'+'circuit_results_lastcycle.txt',cir_results)
         return runParameters
     def iterativeRun(self,editParameters=None,runTimeList=None,endTime=None,manualPhaseTimeInput=False,setHeart=None):
         '''
