@@ -7,9 +7,11 @@ History:
   Author: w.x.chan@gmail.com         08MAR2021           - Created
   Author: w.x.chan@gmail.com         13APR2021           - v2.0.0
   Author: w.x.chan@gmail.com         21APR2021           - v2.1.0
+  Author: w.x.chan@gmail.com         09JUN2021           - v3.0.0
+                                                              -adjust EStime to within 0.1% od minimum volume
 '''
 ########################################################################
-_version='2.1.0'
+_version='3.0.0'
 import logging
 logger = logging.getLogger(__name__)
 
@@ -48,7 +50,8 @@ def simLVcircuit_alignEStime(casename,stopTime,lvufile,period,targetEStime,init_
             cir_results[:,0]-=period
         cir_results=cir_results[cir_results[:,0]>=0]
         cir_results=cir_results[cir_results[:,0]<period]
-        currentEStime=cir_results[np.argmin(cir_results[:,1]),0]
+        minvolindex=np.argmin(cir_results[:,1])
+        currentEStime=cir_results[np.nonzero(cir_results[:(minvolindex+1),1]<=cir_results[minvolindex,1]*1.001)[0][0],0]
         logger.info("      Current EStime="+repr(currentEStime)+', target EStime='+repr(targetEStime))
         if abs(currentEStime-targetEStime)<10 or adj_timetopeaktension<10:
             break
