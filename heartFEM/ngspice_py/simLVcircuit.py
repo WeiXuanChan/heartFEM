@@ -8,9 +8,11 @@ History:
   Author: w.x.chan@gmail.com         08MAR2021           - v1.0.0
   Author: w.x.chan@gmail.com         13APR2021           - v2.0.0
   Author: w.x.chan@gmail.com         21APR2021           - v2.1.0
+  Author: w.x.chan@gmail.com         09JUN2021           - v3.0.0
+                                                              -added remove "temp_"+lvufilename[:-4] files
 '''
 ########################################################################
-_version='2.1.0'
+_version='3.0.0'
 import logging
 logger = logging.getLogger(__name__)
 
@@ -163,7 +165,14 @@ def simLVcircuit(casename,stopTime,lvufile,lvinputvar='V',initLAvol=0,initRAvol=
     
     cmd = "mv " +'./'+outfilename+'circuit.txt '+case_dir+'/'+'circuit_results.txt'
     os.system(cmd)
-
+    cmd = "rm "+'./temp_'+lvufilename
+    os.system(cmd)
+    if lvinputvar[:7]=='table2d':
+        cmd = "rm "+'./temp_'+lvufilename[:-4]+'base.txt'
+        os.system(cmd)
+        if lvinputvar=='table2dtrackrelaxphase':
+            cmd = "rm "+'./temp_'+lvufilename[:-4]+'tr.txt'
+            os.system(cmd)
     #if lvinputvar=='i' or lvinputvar=='v':
     #    cmd = "rm " +cur_dir+'/temp_'+lvufilename
     #    os.system(cmd)
