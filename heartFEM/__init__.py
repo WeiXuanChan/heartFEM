@@ -71,6 +71,9 @@ History:
                                                             -added option to continue getLVbehavior if isinstance(runParameters,str)
                                                             -debug generateLVtable in LVbehaviorRun when folderToLVbehavior is None
                                                             - added save last cycle of circuit results in LVbehaviorRun
+                                                            -read vla0 and vra0 for LVbehaviorRun
+                                                            - remove case when ['ES_time'] not in runParameters in LVbehaviorRun
+                                                            - added fullWindkesselRun in modes to run full windkessel only
 '''
 _version='3.0.0'
 import logging
@@ -1067,10 +1070,12 @@ class LVclosed:
             run_kwargs[key]=kwargs[key]
         if self.defaultRunMode=='iterativeRun':
             runParameters=self.iterativeRun(editParameters=editParameters,**run_kwargs)
-        if self.defaultRunMode=='LVbehaviorRun':
+        elif self.defaultRunMode=='LVbehaviorRun':
             runParameters=self.LVbehaviorRun(editParameters=editParameters,**run_kwargs)
-        if self.defaultRunMode=='unloadedGeometry':
+        elif self.defaultRunMode=='unloadedGeometryRun':
             runParameters=self.unloadedGeometryRun(editParameters=editParameters,**run_kwargs)
+        elif self.defaultRunMode=='fullWindkesselRun':
+            runParameters=self.fullWindkesselRun(editParameters=editParameters,**run_kwargs)
         return runParameters
     def getEDPVR(self,editParameters=None,meshname=None,meshFolder=None,volstep=50,extendVol=0.1,minESV=None,maxEDV=None,saveaddstr='',voladj=0.1,toRunCountFolder=False):
         runParameters=self.defaultParameters.copy()
@@ -1173,23 +1178,74 @@ class LVclosed:
             ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],timetopeak=runParameters['t0'],loading_casename=self.casename+folderToLVbehavior+'/'+meshname)
         cmd = "cp "+self.casename+'/'+self.meshname+'_rvflowrate.txt'+" " + self.casename+"/"+str(self.runCount)+'/'+meshname+'_rvflowrate.txt'
         os.system(cmd)
-        if 'ES_time' not in runParameters:
+        
+        if runParameters['ES_time'] is None:
             ngspice_py.createLVcircuit(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters)
-            ngspice_py.simLVcircuit(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL']*10,self.casename+"/"+str(self.runCount)+'/'+meshname+'_lvcirtable.txt',lvinputvar='table2dtrackrelaxphase',initLVvol=runParameters['EDV_LV'])
         else:
-            if runParameters['ES_time'] is None:
-                ngspice_py.createLVcircuit(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters)
-            else:
-                ngspice_py.createLVcircuit(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters,skipVariableList=["timetopeaktension"])
-            ngspice_py.simLVcircuit_align_EDvol_and_EStime(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL']*10,self.casename+"/"+str(self.runCount)+'/'+meshname+'_lvcirtable.txt',runParameters['BCL'],runParameters['ES_time'],runParameters['t0'],lvinputvar='table2dtrackrelaxphase',initLVvol=runParameters['EDV_LV'])
+            ngspice_py.createLVcircuit(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters,skipVariableList=["timetopeaktension"])
+        ngspice_py.simLVcircuit_align_EDvol_and_EStime(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL']*10,self.casename+"/"+str(self.runCount)+'/'+meshname+'_lvcirtable.txt',runParameters['BCL'],runParameters['ES_time'],runParameters['t0'],lvinputvar='table2dtrackrelaxphase',initLVvol=runParameters['EDV_LV'],vla0=runParameters['vla0'],vra0=runParameters['vra0'])
         cir_results=np.loadtxt(self.casename+"/"+str(self.runCount)+'/'+'circuit_results.txt',skiprows=1)
+        with open(self.casename+"/"+str(self.runCount)+'/'+'circuit_results.txt','r') as f:
+            cir_results_header=f.readline()
+        if cir_results_header[-1]=='\n':
+            cir_results_header=cir_results_header[:-1]
         for n in range(0,cir_results.shape[1],2):
             cir_results[:,n]*=1000. #set to ms
         while cir_results[-1,0]>=(2.*runParameters['BCL']):
             cir_results[:,0]-=runParameters['BCL']
         cir_results=cir_results[cir_results[:,0]>=0]
         cir_results=cir_results[cir_results[:,0]<runParameters['BCL']]
-        np.savetxt(self.casename+"/"+str(self.runCount)+'/'+'circuit_results_lastcycle.txt',cir_results)
+        np.savetxt(self.casename+"/"+str(self.runCount)+'/'+'circuit_results_lastcycle.txt',cir_results,header=cir_results_header)
+        return runParameters
+    def fullWindkesselRun(self,editParameters=None,unloadGeo=True,folderToLVbehavior=None):
+        #if using displacement to get unloaded geometry, set unloadGeo='displacement'
+        if isinstance(folderToLVbehavior,str):
+            if folderToLVbehavior[0]!='/':
+                folderToLVbehavior='/'+folderToLVbehavior
+        runParameters=self.defaultParameters.copy()
+        if editParameters is not None:
+            for key in runParameters:
+                if key in editParameters:
+                    runParameters[key]=editParameters[key]
+        else:
+            editParameters={}
+        self.writeRunParameters(self.casename+"/"+str(self.runCount),runParameters)
+        if unloadGeo:
+            meshname=self.meshname+'_unloadedmesh'
+        else:
+            meshname=self.meshname
+        
+        volstep_ej=(runParameters['EDV_LV']-runParameters['ESV_LV'])/runParameters['EDV_LV']
+        if volstep_ej<0.6:
+            volstep_esv=0.4*runParameters['EDV_LV']
+        else:
+            volstep_esv=runParameters['ESV_LV']
+        volstep=volstep_esv*0.9*(runParameters['EDV_LV']/volstep_esv*1.1/0.9)**(np.linspace(0,1,num=50))[::-1]
+        volstep=np.concatenate((volstep[:1]*1.3,volstep[:1]*1.1,volstep,volstep[-1:]*0.9,volstep[-1:]*0.7),axis=0)
+        if folderToLVbehavior is None:
+            ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],timetopeak=runParameters['t0'],loading_casename=self.casename+"/"+str(self.runCount)+'/'+meshname)
+        else:
+            ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],timetopeak=runParameters['t0'],loading_casename=self.casename+folderToLVbehavior+'/'+meshname)
+        cmd = "cp "+self.casename+'/'+self.meshname+'_rvflowrate.txt'+" " + self.casename+"/"+str(self.runCount)+'/'+meshname+'_rvflowrate.txt'
+        os.system(cmd)
+        
+        if runParameters['ES_time'] is None:
+            ngspice_py.createLVcircuit(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters)
+        else:
+            ngspice_py.createLVcircuit(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters,skipVariableList=["timetopeaktension"])
+        ngspice_py.simLVcircuit_align_EDvol_and_EStime(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL']*10,self.casename+"/"+str(self.runCount)+'/'+meshname+'_lvcirtable.txt',runParameters['BCL'],runParameters['ES_time'],runParameters['t0'],lvinputvar='table2dtrackrelaxphase',initLVvol=runParameters['EDV_LV'],vla0=runParameters['vla0'],vra0=runParameters['vra0'])
+        cir_results=np.loadtxt(self.casename+"/"+str(self.runCount)+'/'+'circuit_results.txt',skiprows=1)
+        with open(self.casename+"/"+str(self.runCount)+'/'+'circuit_results.txt','r') as f:
+            cir_results_header=f.readline()
+        if cir_results_header[-1]=='\n':
+            cir_results_header=cir_results_header[:-1]
+        for n in range(0,cir_results.shape[1],2):
+            cir_results[:,n]*=1000. #set to ms
+        while cir_results[-1,0]>=(2.*runParameters['BCL']):
+            cir_results[:,0]-=runParameters['BCL']
+        cir_results=cir_results[cir_results[:,0]>=0]
+        cir_results=cir_results[cir_results[:,0]<runParameters['BCL']]
+        np.savetxt(self.casename+"/"+str(self.runCount)+'/'+'circuit_results_lastcycle.txt',cir_results,header=cir_results_header)
         return runParameters
     def iterativeRun(self,editParameters=None,runTimeList=None,endTime=None,manualPhaseTimeInput=False,setHeart=None):
         '''
