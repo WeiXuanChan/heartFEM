@@ -11,7 +11,9 @@
 .PARAM freq4 = 4 / heartperiod
 .PARAM trackrelaxphase = 0
 .PARAM lvregurgitation = <<lvregurger>>
+.PARAM lvregurgitationvalveratio = <<lvregurgevalveratio>>
 .PARAM rvregurgitation = <<rvregurger>>
+.PARAM rvregurgitationvalveratio = <<rvregurgevalveratio>>
 
 .func manmod(shorttime) {shorttime - floor(shorttime / heartperiod) * heartperiod}
 .func disfrompeak(xtime,peaktime,width) {min( abs( manmod(xtime) - peaktime) , heartperiod - abs( manmod(xtime) - peaktime))}
@@ -89,34 +91,42 @@ Ervu   rvgnd2  gnd     vol = 'v(rv)'
 Elau   lagnd2  gnd     vol = 'cossq( TIME ,<<laamp>>,<<lapeaktime>>,<<lawidth>>)'
 Erau   ragnd2  gnd     vol = 'cossq( TIME ,<<raamp>>,<<rapeaktime>>,<<rawidth>>)'
 
-Xlalavalv  la  lavalvp1    vein  rval=<<lalavalvr>>    lval=<<lalavalvl>>    kval=<<lalavalvk>>    betaval=<<lalavalvb>>
+Xlalavalv  la  lavalvp1    vein  rval=<<lalavalvr>>    lval=<<lalavalvl>>
 Vlalavalv  lavalvp1 lavalvp2 dc 0
 Blalavalv  lavalvp2 lavalv V=' <<lalavalvk>> * ( i(Vlalavalv) ^2 )^( <<lalavalvb>> / 2) * sgn( i(Vlalavalv) ) '
-Xlvlvvalv  lv  lvvalvp1    vein  rval=<<lvlvvalvr>>    lval=<<lvlvvalvl>>    kval=<<lvlvvalvk>>    betaval=<<lvlvvalvb>>
+Xlvlvvalv  lv  lvvalvp1    vein  rval=<<lvlvvalvr>>    lval=<<lvlvvalvl>>
 Vlvlvvalv  lvvalvp1 lvvalvp2 dc 0
 Blvlvvalv  lvvalvp2 lvvalv V=' <<lvlvvalvk>> * ( i(Vlvlvvalv) ^2 )^( <<lvlvvalvb>> / 2) * sgn( i(Vlvlvvalv) ) '
-Xraravalv  ra  ravalvp1    vein  rval=<<raravalvr>>    lval=<<raravalvl>>    kval=<<raravalvk>>    betaval=<<raravalvb>>
+Xraravalv  ra  ravalvp1    vein  rval=<<raravalvr>>    lval=<<raravalvl>>
 Vraravalv  ravalvp1 ravalvp2 dc 0
 Braravalv  ravalvp2 ravalv V=' <<raravalvk>> * ( i(Vraravalv) ^2 )^( <<raravalvb>> / 2) * sgn( i(Vraravalv) ) '
-Xrvrvvalv  rv  rvvalvp1    vein  rval=<<rvrvvalvr>>    lval=<<rvrvvalvl>>    kval=<<rvrvvalvk>>    betaval=<<rvrvvalvb>>
+Xrvrvvalv  rv  rvvalvp1    vein  rval=<<rvrvvalvr>>    lval=<<rvrvvalvl>>
 Vrvrvvalv  rvvalvp1 rvvalvp2 dc 0
 Brvrvvalv  rvvalvp2 rvvalv V=' <<rvrvvalvk>> * ( i(Vrvrvvalv) ^2 )^( <<rvrvvalvb>> / 2) * sgn( i(Vrvrvvalv) ) '
 
 
 alv   lvvalv   aa    valve
 .if (lvregurgitation > 0)
-Rlvregurgitation lv lvregurp1 r = lvregurgitation
-Vlvregurgitation lvregurp1 lavalvp1 dc 0
+Rlvregurgitation lv lvregurp1             r = lvregurgitation
+Vlvregurgitation lvregurp1 lavalvp1       dc 0
+.elseif (lvregurgitationvalveratio > 0)
+Vlvregurgitation  lv          lvregurp1   dc 0
+Blvregurgitation  lvregurp1   lvregurp2   V=' <<lalavalvk>> / lvregurgitationvalveratio * ( i(Vlvregurgitation) ^2 )^( <<lalavalvb>> / 2) * sgn( i(Vlvregurgitation) ) '
+alvregurgitation  lvregurp2   lavalvp1    valve
 .else
-Vlvregurgitation lvregurp1 gnd dc 0
+Vlvregurgitation  lvregurp1   gnd         dc 0
 .endif
 ala   lavalv   lv    valve
 arv   rvvalv   pa1   valve
 .if (rvregurgitation > 0)
-Rrvregurgitation rv rvregurp1 r = rvregurgitation
-Vrvregurgitation rvregurp1 rvvalvp1 dc 0
+Rrvregurgitation rv rvregurp1             r = rvregurgitation
+Vrvregurgitation rvregurp1                rvvalvp1 dc 0
+.elseif (rvregurgitationvalveratio > 0)
+Vrvregurgitation  rv          rvregurp1   dc 0
+Brvregurgitation  rvregurp1   rvregurp2   V=' <<raravalvk>> / rvregurgitationvalveratio * ( i(Vrvregurgitation) ^2 )^( <<raravalvb>> / 2) * sgn( i(Vrvregurgitation) ) '
+arvregurgitation  rvregurp2   ravalvp1    valve
 .else
-Vrvregurge rvregurp1 gnd dc 0
+Vrvregurgitation  rvregurp1   gnd         dc 0
 .endif
 ara   ravalv   rv    valve
 afo   fovalv   la    valve
@@ -141,39 +151,39 @@ Cplac plac  gnd    <<placc>>
 Csvc  svc   gnd    <<svcc>>  
 Cuv   uv    gnd    <<uvc>>   
 
-Xcabr     ca    br     vein  rval=<<cabrr>>     lval=<<cabrl>>     kval=<<cabrk>>     betaval=<<cabrb>>
-Xbrsvc    br    svc    vein  rval=<<brsvcr>>    lval=<<brsvcl>>    kval=<<brsvck>>    betaval=<<brsvcb>>
-Xubsvc    ub    svc    vein  rval=<<ubsvcr>>    lval=<<ubsvcl>>    kval=<<ubsvck>>    betaval=<<ubsvcb>>
-Xao1ca    ao1   ca     vein  rval=<<ao1car>>    lval=<<ao1cal>>    kval=<<ao1cak>>    betaval=<<ao1cab>>
-Xao1ub    ao1   ub     vein  rval=<<ao1ubr>>    lval=<<ao1ubl>>    kval=<<ao1ubk>>    betaval=<<ao1ubb>>
-Xsvcra    svc   ra     vein  rval=<<svcrar>>    lval=<<svcral>>    kval=<<svcrak>>    betaval=<<svcrab>>
-Xpa1pa2   pa1   pa2    vein  rval=<<pa1pa2r>>   lval=<<pa1pa2l>>   kval=<<pa1pa2k>>   betaval=<<pa1pa2b>>
-Xpa2lung  pa2   lung   vein  rval=<<pa2lungr>>  lval=<<pa2lungl>>  kval=<<pa2lungk>>  betaval=<<pa2lungb>>
-Xlungla   lung  la     vein  rval=<<lunglar>>   lval=<<lunglal>>   kval=<<lunglak>>   betaval=<<lunglab>>
-Xaaao1    aa    ao1    vein  rval=<<aaao1r>>    lval=<<aaao1l>>    kval=<<aaao1k>>    betaval=<<aaao1b>>
-Xao1ao2   ao1   ao2    vein  rval=<<ao1ao2r>>   lval=<<ao1ao2l>>   kval=<<ao1ao2k>>   betaval=<<ao1ao2b>>
-Xao2ao3   ao2   ao3    vein  rval=<<ao2ao3r>>   lval=<<ao2ao3l>>   kval=<<ao2ao3k>>   betaval=<<ao2ao3b>>
-Xao3ao4   ao3   ao4    vein  rval=<<ao3ao4r>>   lval=<<ao3ao4l>>   kval=<<ao3ao4k>>   betaval=<<ao3ao4b>>
-Xao3kid   ao3   kid    vein  rval=<<ao3kidr>>   lval=<<ao3kidl>>   kval=<<ao3kidk>>   betaval=<<ao3kidb>>
-Xao3he    ao3   he     vein  rval=<<ao3her>>    lval=<<ao3hel>>    kval=<<ao3hek>>    betaval=<<ao3heb>>
-Xao3inte  ao3   inte   vein  rval=<<ao3inter>>  lval=<<ao3intel>>  kval=<<ao3intek>>  betaval=<<ao3inteb>>
-Xao4leg   ao4   leg    vein  rval=<<ao4legr>>   lval=<<ao4legl>>   kval=<<ao4legk>>   betaval=<<ao4legb>>
-Xao4plac  ao4   plac   vein  rval=<<ao4placr>>  lval=<<ao4placl>>  kval=<<ao4plack>>  betaval=<<ao4placb>>
-Xkidivc   kid   ivc    vein  rval=<<kidivcr>>   lval=<<kidivcl>>   kval=<<kidivck>>   betaval=<<kidivcb>>
-Xintehe   inte  he     vein  rval=<<inteher>>   lval=<<intehel>>   kval=<<intehek>>   betaval=<<inteheb>>
-Xlegivc   leg   ivc    vein  rval=<<legivcr>>   lval=<<legivcl>>   kval=<<legivck>>   betaval=<<legivcb>>
-Xplacuv   plac  uv     vein  rval=<<placuvr>>   lval=<<placuvl>>   kval=<<placuvk>>   betaval=<<placuvb>>
-Xuvhe     uv    he     vein  rval=<<uvher>>     lval=<<uvhel>>     kval=<<uvhek>>     betaval=<<uvheb>>
-Xheivc    he    ivc    vein  rval=<<heivcr>>    lval=<<heivcl>>    kval=<<heivck>>    betaval=<<heivcb>>
-Xivcra    ivc   ra     vein  rval=<<ivcrar>>    lval=<<ivcral>>    kval=<<ivcrak>>    betaval=<<ivcrab>>
+Xcabr     ca    br     vein  rval=<<cabrr>>     lval=<<cabrl>>
+Xbrsvc    br    svc    vein  rval=<<brsvcr>>    lval=<<brsvcl>>
+Xubsvc    ub    svc    vein  rval=<<ubsvcr>>    lval=<<ubsvcl>>
+Xao1ca    ao1   ca     vein  rval=<<ao1car>>    lval=<<ao1cal>>
+Xao1ub    ao1   ub     vein  rval=<<ao1ubr>>    lval=<<ao1ubl>>
+Xsvcra    svc   ra     vein  rval=<<svcrar>>    lval=<<svcral>>
+Xpa1pa2   pa1   pa2    vein  rval=<<pa1pa2r>>   lval=<<pa1pa2l>>
+Xpa2lung  pa2   lung   vein  rval=<<pa2lungr>>  lval=<<pa2lungl>>
+Xlungla   lung  la     vein  rval=<<lunglar>>   lval=<<lunglal>>
+Xaaao1    aa    ao1    vein  rval=<<aaao1r>>    lval=<<aaao1l>>
+Xao1ao2   ao1   ao2    vein  rval=<<ao1ao2r>>   lval=<<ao1ao2l>>
+Xao2ao3   ao2   ao3    vein  rval=<<ao2ao3r>>   lval=<<ao2ao3l>>
+Xao3ao4   ao3   ao4    vein  rval=<<ao3ao4r>>   lval=<<ao3ao4l>>
+Xao3kid   ao3   kid    vein  rval=<<ao3kidr>>   lval=<<ao3kidl>>
+Xao3he    ao3   he     vein  rval=<<ao3her>>    lval=<<ao3hel>>
+Xao3inte  ao3   inte   vein  rval=<<ao3inter>>  lval=<<ao3intel>>
+Xao4leg   ao4   leg    vein  rval=<<ao4legr>>   lval=<<ao4legl>>
+Xao4plac  ao4   plac   vein  rval=<<ao4placr>>  lval=<<ao4placl>>
+Xkidivc   kid   ivc    vein  rval=<<kidivcr>>   lval=<<kidivcl>>
+Xintehe   inte  he     vein  rval=<<inteher>>   lval=<<intehel>>
+Xlegivc   leg   ivc    vein  rval=<<legivcr>>   lval=<<legivcl>>
+Xplacuv   plac  uv     vein  rval=<<placuvr>>   lval=<<placuvl>>
+Xuvhe     uv    he     vein  rval=<<uvher>>     lval=<<uvhel>>
+Xheivc    he    ivc    vein  rval=<<heivcr>>    lval=<<heivcl>>
+Xivcra    ivc   ra     vein  rval=<<ivcrar>>    lval=<<ivcral>>
 
-Xda       pa2   ao2p1    vein  rval=<<dar>>    lval=<<dal>>    kval=<<dak>>    betaval=<<dab>>
+Xda       pa2   ao2p1    vein  rval=<<dar>>    lval=<<dal>>
 Vda  ao2p1 ao2p2 dc 0
 Bda  ao2p2 ao2 V=' <<dak>> * ( i(Vda) ^2 )^( <<dab>> / 2) * sgn( i(Vda) ) '
-Xdv       uv    ivcp1    vein  rval=<<dvr>>    lval=<<dvl>>    kval=<<dvk>>    betaval=<<dvb>>
+Xdv       uv    ivcp1    vein  rval=<<dvr>>    lval=<<dvl>>
 Vdv  ivcp1 ivcp2 dc 0
 Bdv  ivcp2 ivc V=' <<dvk>> * ( i(Vdv) ^2 )^( <<dvb>> / 2) * sgn( i(Vdv) ) '
-Xfo       ivc   fovalvp1 vein  rval=<<for>>    lval=<<fol>>    kval=<<fok>>    betaval=<<fob>>
+Xfo       ivc   fovalvp1 vein  rval=<<for>>    lval=<<fol>>
 Vfo  fovalvp1 fovalvp2 dc 0
 Bfo  fovalvp2 fovalv V=' <<fok>> * ( i(Vfo) ^2 )^( <<fob>> / 2) * sgn( i(Vfo) ) '
 

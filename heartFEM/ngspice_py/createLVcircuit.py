@@ -9,7 +9,7 @@ History:
   Author: w.x.chan@gmail.com         13APR2021           - v2.0.0
   Author: w.x.chan@gmail.com         21APR2021           - v2.1.0
   Author: w.x.chan@gmail.com         10Jun2021           - v3.0.0
-                                                              -added lvregurger and rvregurger for regurgitation on lv and rv to la and ra respectively
+                                                              -added lvregurger/k/b and rvregurger/k/b for regurgitation on lv and rv to la and ra respectively
 '''
 ########################################################################
 _version='3.0.0'
@@ -69,7 +69,10 @@ def createLVcircuit(casename,paramDict,skipVariableList=None,verbose=True):
                 cmd = "sed -i.bak s/'<<"+side+tempstr+">>'/'" + '{:10.6f}'.format(paramDict[side+tempstr]) + "'/g " + cirfilename
                 os.system(cmd)
         if side+"vregurger" not in skipVariableList:
-            cmd = "sed -i.bak s/'<<"+side+"vregurger>>'/'" + paramDict['rvfunc'] + "'/g " + cirfilename
+            cmd = "sed -i.bak s/'<<"+side+"vregurger>>'/'" + str(paramDict[side+"vregurger"]) + "'/g " + cirfilename
+            os.system(cmd)
+        if side+"vregurgevalveratio" not in skipVariableList:
+            cmd = "sed -i.bak s/'<<"+side+"vregurgevalveratio>>'/'" + str(paramDict[side+"vregurgevalveratio"]) + "'/g " + cirfilename
             os.system(cmd)
     if "rvfunc" not in skipVariableList:
         cmd = "sed -i.bak s/'<<rvfunc>>'/'" + paramDict['rvfunc'] + "'/g " + cirfilename

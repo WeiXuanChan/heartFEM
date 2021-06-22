@@ -9,6 +9,7 @@ History:
   Author: w.x.chan@gmail.com         21APR2021           - v2.1.0
   Author: w.x.chan@gmail.com         09JUN2021           - v3.0.0
                                                               -adjust EStime to within 0.1% od minimum volume
+                                                              -adjust try_initLVvol=initLVvol*1.05
 '''
 ########################################################################
 _version='3.0.0'
@@ -78,7 +79,7 @@ def simLVcircuit_alignEStime(casename,stopTime,lvufile,period,targetEStime,init_
 def simLVcircuit_align_EDvol_and_EStime(casename,stopTime,lvufile,period,targetEStime,init_timetopeaktension,try_initLVvol=None,lvinputvar='V',initLAvol=0,initRAvol=0,initLVvol=0,initRVvol=0,vla0=None,vra0=None,init_file=None,init_time=None,iterationNumber=100,verbose=True):
     targetinitLVvol=initLVvol
     if try_initLVvol is None:
-        try_initLVvol=initLVvol
+        try_initLVvol=initLVvol*1.05
         adj_try_initLVvol=0.05*targetinitLVvol
     elif isinstance(try_initLVvol,(int,float)):
         adj_try_initLVvol=0.05*targetinitLVvol
