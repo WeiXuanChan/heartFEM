@@ -19,7 +19,6 @@ setup(
   extras_require = {
         'fem analysis software':  ['fenics'],
         'circuit analysis':  ['ngspice'],
-        'equation setup for heart':  ['lcleeHeart'],
         'data storage and processing':  ['vtk']
   },
   classifiers=[
