@@ -4,7 +4,7 @@ setup(
   packages = ['heartFEM'],  
   include_package_data=True,   
   package_data={
-        'ngspice_py':['*']
+        'ngspice_py':['*'],
         'lcleeHeart':['*']
         },
   version = '3.0.0',      # Start with a small number and increase it with every change you make
