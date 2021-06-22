@@ -1,1 +1,2 @@
 include heartFEM/ngspice_py/*
+include heartFEM/lcleeHeart/*
