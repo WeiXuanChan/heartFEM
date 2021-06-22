@@ -32,15 +32,18 @@ History:
                                                             -debug when defaultParameters and defaultAge is swapped during initialization
   Author: w.x.chan@gmail.com         19MAY2021           - v3.0.0
                                                             -added reguritation for heart chambers
+                                                            - added vra0 and vla0
+                                                            -debug these values: 'rac', 'lac', 'pa1pa2l', 'lalavalvl', 'lvlvvalvr', 
+                                                            - debug scale with age
 '''
-_version='1.2.1'
+_version='3.0.0'
 import logging
 logger = logging.getLogger(__name__)
 
 parameters_for_FEniCS=['Kspring_constant','Tact_constant','T0_LV','ESV_LV','lr','BCL','Ca0','Ca0max','B','t0','l0','m','b']                 
 parameters_for_mesh=['topid','endoid','epiid','Laxis_X','Laxis_Y','Laxis_Z','clip_ratio','endo_angle','epi_angle','EDV_LV','EDP_LV']
 WindkesselComponents=['lv','la','rv','ra','aa','ao1','ao2','ao3','ao4','br','ca','ub','he','inte','ivc','kid','leg','lung','pa1','pa2','plac','svc','uv']
-WindkessellinkComponents=['aaao1','ao1ao2','ao2ao3','ao3ao4','pa1pa2','pa2lung','da','ao1ca','cabr','brsvc','ao1ub','ubsvc','ao3he','ao3inte','intehe','ao3kid','kidivc','ao4plac','placuv','ao4leg','legivc','uvhe','heivc','dv','svcra','ivcra','lungla','fo','raravalv','rvrvvalv','lvlvvalv','rvrvvalv']
+WindkessellinkComponents=['aaao1','ao1ao2','ao2ao3','ao3ao4','pa1pa2','pa2lung','da','ao1ca','cabr','brsvc','ao1ub','ubsvc','ao3he','ao3inte','intehe','ao3kid','kidivc','ao4plac','placuv','ao4leg','legivc','uvhe','heivc','dv','svcra','ivcra','lungla','fo','raravalv','lalavalv','lvlvvalv','rvrvvalv']
 defaultAgeScalePower={'defaultr':-1.,'pa2lungr':-1.2,'lunglar':-1.2,'cabrr':-1.1,'brsvcr':-1.1,'dvr':-0.55,
                       'defaultl':-0.33,
                       'defaultc':1.33,'brc':1.471,'lungc':1.6,'ra':0.5,'la':0.5,
@@ -218,15 +221,17 @@ class heartParameters(dict):
             self['uvc'] = 0.3
             self['svcc'] =1.
             self['ivcc'] =0.6
-            self['rac'] =1.
-            self['lac'] =2.
+            self['rac'] =2.
+            self['lac'] =1.
 
             self['dal'] =0.006
             self['ao1cal'] =0.08
             self['aaao1l'] =0.002
-            self['pa1pa2l'] =0.02
+            self['pa1pa2l'] =0.002
             self['raravalvl'] =0.0016
-            self['lalavalvl'] =0.0
+            self['lalavalvl'] =0.0016
+            self['rvrvvalvl'] =0.
+            self['lvlvvalvl'] =0.
             
             self['aaao1r'] =0.12
             self['ao1ao2r'] =0.4
@@ -258,7 +263,7 @@ class heartParameters(dict):
             self['for'] =0.
             self['raravalvr'] =0.
             self['rvrvvalvr'] =0.08
-            self['lvlvvalvr'] =0.
+            self['lvlvvalvr'] =0.08
             self['lalavalvr'] =0.
             
             self['fok'] =0.4
@@ -278,7 +283,16 @@ class heartParameters(dict):
             self['lvlvvalvb'] =2.
             
             self['lvregurger']=-1
+            self['lvregurgevalveratio']=-1
             self['rvregurger']=-1
+            self['rvregurgevalveratio']=-1
+            
+            self['ES_time']=None
+            self['vla0']=None
+            self['vra0']=None
+            
+            self.scaleWinkessel({'default':defaultAdjustmentToScaling['r_scale']},compstr='r')
+            self.scaleWinkessel({'default':defaultAdjustmentToScaling['c_scale']},compstr='c')
             if len(modelString)>5:
                 self.scaleWinkesselwithAge(float(modelString[5:]))
     def getParameterRelation(self,parameterStringList,return_integer=True):
@@ -332,8 +346,6 @@ class heartParameters(dict):
         set poweradjustDict to enable default
         '''
         if poweradjustDict is None:
-            self.scaleWinkessel({'default':defaultAdjustmentToScaling['r_scale']},compstr='r')
-            self.scaleWinkessel({'default':defaultAdjustmentToScaling['c_scale']},compstr='c')
             poweradjustDict={'r':defaultAdjustmentToScaling['R_adj'],'c':defaultAdjustmentToScaling['C_adj']}
         if compstr!='':
             for comp in WindkesselComponents + WindkessellinkComponents:
@@ -343,9 +355,9 @@ class heartParameters(dict):
                     else:
                         agepower=defaultAgeScalePower['default'+compstr]
                     if comp+compstr in poweradjustDict:
-                        agepower-=defaultAgeScalePower['default'+compstr]+poweradjustDict[comp+compstr]*defaultAgeScalePower['default'+compstr]
+                        agepower-=defaultAgeScalePower['default'+compstr]-poweradjustDict[comp+compstr]*defaultAgeScalePower['default'+compstr]
                     elif compstr in poweradjustDict:
-                        agepower-=defaultAgeScalePower['default'+compstr]+poweradjustDict[compstr]*defaultAgeScalePower['default'+compstr]
+                        agepower-=defaultAgeScalePower['default'+compstr]-poweradjustDict[compstr]*defaultAgeScalePower['default'+compstr]
                     self[comp+compstr]*=((10.**(0.2508+0.1458*ageInWeeks-0.0016*ageInWeeks**2.))/(10.**(0.2508 + 0.1458*38.-0.0016*38.**2.)))**agepower
         else:
             self.scaleWinkesselwithAge(ageInWeeks,poweradjustDict=poweradjustDict,compstr='r')
