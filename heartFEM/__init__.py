@@ -75,7 +75,7 @@ History:
                                                             - remove case when ['ES_time'] not in runParameters in LVbehaviorRun
                                                             - added fullWindkesselRun in modes to run full windkessel only
 '''
-_version='3.0.1'
+_version='3.0.2'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
