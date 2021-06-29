@@ -1,10 +1,10 @@
 from setuptools import setup
 setup(
   name = 'heartFEM',         # How you named your package folder (MyLib)
-  packages = ['heartFEM','heartFEM.lcleeHeart'],  
+  packages = ['heartFEM','heartFEM.ngspice','heartFEM.lcleeHeart'],  
   include_package_data=True,   
   package_data={
-        'heartFEM':['ngspice_py/*'],
+        'ngspice':['*'],
         'lcleeHeart':['*','vtk_py/*']
         },
   version = '3.0.3',      # Start with a small number and increase it with every change you make
