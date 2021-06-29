@@ -1,7 +1,7 @@
 from setuptools import setup
 setup(
   name = 'heartFEM',         # How you named your package folder (MyLib)
-  packages = ['heartFEM','heartFEM.ngspice','heartFEM.lcleeHeart'],  
+  packages = ['heartFEM','heartFEM.lcleeHeart'],  
   include_package_data=True,   
   package_data={
         'ngspice':['*'],
