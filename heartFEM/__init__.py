@@ -74,13 +74,13 @@ History:
                                                             -read vla0 and vra0 for LVbehaviorRun
                                                             - remove case when ['ES_time'] not in runParameters in LVbehaviorRun
                                                             - added fullWindkesselRun in modes to run full windkessel only
-  Author: w.x.chan@gmail.com         08JUL2021           - v3.1.0
+  Author: w.x.chan@gmail.com         08JUL2021           - v3.1.1
                                                             -ngspice_py v3.0.0
                                                             -heartParameters v3.1.0
                                                             -lcleeHeart v3.1.0
                                                             -added outOfplaneDeg for meshing
 '''
-_version='3.1.0'
+_version='3.1.1'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
