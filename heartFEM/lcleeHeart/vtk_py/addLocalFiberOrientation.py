@@ -19,6 +19,7 @@ def addLocalFiberOrientation(ugrid_wall,
                              fiber_angle_end,
                              fiber_angle_epi,
                              points_AB=None,
+                             outOfplaneDeg=0.,
                              verbose=True):
 
     if (verbose): print ('*** addLocalFiberOrientation ***')
@@ -76,9 +77,17 @@ def addLocalFiberOrientation(ugrid_wall,
         eLL = numpy.array(farray_eLL.GetTuple(num_cell))
 
         fiber_angle_in_radians = math.pi*fiber_angle_in_degrees/180
-        eF = math.cos(fiber_angle_in_radians) * eCC + math.sin(fiber_angle_in_radians) * eLL
-        eS = eRR
-        eN = numpy.cross(eF, eS)
+        if outOfplaneDeg==0.:
+            eF = math.cos(fiber_angle_in_radians) * eCC + math.sin(fiber_angle_in_radians) * eLL
+            eS = eRR
+            eN = numpy.cross(eF, eS)
+        else:
+            temp_eF = math.cos(fiber_angle_in_radians) * eCC + math.sin(fiber_angle_in_radians) * eLL
+            temp_eS = eRR
+            eN = numpy.cross(temp_eF, temp_eS)
+            out_of_plane_in_radians=math.pi*outOfplaneDeg/180
+            eF=math.cos(out_of_plane_in_radians) * temp_eF + math.sin(out_of_plane_in_radians) * temp_eS
+            eS=math.cos(out_of_plane_in_radians) * temp_eS - math.sin(out_of_plane_in_radians) * temp_eF
         farray_eF.InsertTuple(num_cell, eF)
         farray_eS.InsertTuple(num_cell, eS)
         farray_eN.InsertTuple(num_cell, eN)
