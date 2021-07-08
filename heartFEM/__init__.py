@@ -74,8 +74,13 @@ History:
                                                             -read vla0 and vra0 for LVbehaviorRun
                                                             - remove case when ['ES_time'] not in runParameters in LVbehaviorRun
                                                             - added fullWindkesselRun in modes to run full windkessel only
+  Author: w.x.chan@gmail.com         08JUL2021           - v3.1.0
+                                                            -ngspice_py v3.0.0
+                                                            -heartParameters v3.1.0
+                                                            -lcleeHeart v3.1.0
+                                                            -added outOfplaneDeg for meshing
 '''
-_version='3.0.4'
+_version='3.1.0'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
@@ -308,7 +313,7 @@ class LVclosed:
         self.defaultParameters['Laxis_Y']=Laxis[1]
         self.defaultParameters['Laxis_Z']=Laxis[2]
         logger.info('Estimated Laxis as '+repr(Laxis))
-    def generateMesh(self,Laxis=None,endo_angle='',epi_angle='',clipratio=0.95,meshsize=0.6,saveaddstr='',toRunCountFolder=False):
+    def generateMesh(self,Laxis=None,endo_angle='',epi_angle='',outOfplaneDeg=0.,clipratio=0.95,meshsize=0.6,saveaddstr='',toRunCountFolder=False):
         if Laxis is None:
             Laxis=np.array([np.array([self.defaultParameters['Laxis_X'],self.defaultParameters['Laxis_Y'],self.defaultParameters['Laxis_Z']])])
         if toRunCountFolder:
@@ -317,9 +322,9 @@ class LVclosed:
                     toRunCountFolder='/'+toRunCountFolder
             else:
                 toRunCountFolder='/'+str(self.runCount)
-            return lcleeHeart.generateMesh(self.casename,self.meshname,Laxis,endo_angle=endo_angle,epi_angle=epi_angle,clipratio=clipratio,meshsize=meshsize,meshname=self.meshname+saveaddstr,saveSubFolder=toRunCountFolder)
+            return lcleeHeart.generateMesh(self.casename,self.meshname,Laxis,endo_angle=endo_angle,epi_angle=epi_angle,outOfplaneDeg=outOfplaneDeg,clipratio=clipratio,meshsize=meshsize,meshname=self.meshname+saveaddstr,saveSubFolder=toRunCountFolder)
         else:
-            return lcleeHeart.generateMesh(self.casename,self.meshname,Laxis,endo_angle=endo_angle,epi_angle=epi_angle,clipratio=clipratio,meshsize=meshsize,meshname=self.meshname+saveaddstr)
+            return lcleeHeart.generateMesh(self.casename,self.meshname,Laxis,endo_angle=endo_angle,epi_angle=epi_angle,outOfplaneDeg=outOfplaneDeg,clipratio=clipratio,meshsize=meshsize,meshname=self.meshname+saveaddstr)
     def runWinkessel(self,comm,tstep,dt_dt,*args):
         if self.LVage=='adult':
             #args=(p_cav,V_cav,V_art,V_ven,V_LA)
@@ -1106,7 +1111,7 @@ class LVclosed:
         self.writeRunParameters(self.casename+"/"+str(self.runCount),runParameters)
         #if self.runCount<=4:
         #    return runParameters
-        self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=True)
+        self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],outOfplaneDeg=runParameters['outOfplaneAngle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=True)
         heartRef=lcleeHeart.heart(self.casename+"/"+str(self.runCount),self.meshname,runParameters)
         volRef=heartRef.uflforms.cavityvol()
         heart=self.getUnloadedGeometry(editParameters=runParameters,casename=self.casename+"/"+str(self.runCount),savename=self.meshname+'_unloadedmesh',toRunCountFolder=False,inverseHeart=inverseHeart)
@@ -1133,9 +1138,9 @@ class LVclosed:
             editParameters={}
         self.writeRunParameters(self.casename+"/"+str(self.runCount),runParameters)
         if min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
-            self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=True)
+            self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],outOfplaneDeg=runParameters['outOfplaneAngle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=True)
         elif not(os.path.isfile(self.casename+'/'+self.meshname+'.hdf5')):
-            self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=False)
+            self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],outOfplaneDeg=runParameters['outOfplaneAngle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=False)
         if unloadGeo:
             meshname=self.meshname+'_unloadedmesh'
         else:
@@ -1261,9 +1266,9 @@ class LVclosed:
         self.writeRunParameters(self.casename+"/"+str(self.runCount),runParameters)
         os.makedirs(self.casename+"/"+str(self.runCount)+"/stress",exist_ok=True)
         if min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
-            self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=True)
+            self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],outOfplaneDeg=runParameters['outOfplaneAngle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=True)
         elif not(os.path.isfile(self.casename+'/'+self.meshname+'.hdf5')):
-            self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=False)
+            self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],outOfplaneDeg=runParameters['outOfplaneAngle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=False)
         
         displacementfile = fenics.File(self.casename+"/"+str(self.runCount)+"/deformation/u_disp.pvd")
         #activestressfile = fenics.File(self.casename+"/"+str(self.runCount)+"/activestress/stress.pvd") #CW
