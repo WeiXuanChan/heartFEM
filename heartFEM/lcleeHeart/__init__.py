@@ -36,8 +36,10 @@ History:
                                                             -debug inverse to solve for Finv = deformation gradient - I 
   Author: w.x.chan@gmail.com         09JUN2021           - v3.0.0
                                                             -integrate into heartFEM
+  Author: w.x.chan@gmail.com         08JUL2021           - v3.1.0
+                                                            -added outOfplaneDeg for meshing
 '''
-_version='3.0.0'
+_version='3.1.0'
 
 import sys
 
@@ -60,7 +62,7 @@ from mpi4py import MPI as pyMPI
 from heartFEM.lcleeHeart.rotateUGrid_w_axis import rotateUGrid_w_axis
 from pyquaternion import Quaternion
 
-def generateMesh(casePath,stlname,Laxis,endo_angle='',epi_angle='',clipratio=0.75,meshsize=0.6,meshname=None,saveSubFolder=''):
+def generateMesh(casePath,stlname,Laxis,endo_angle='',epi_angle='',outOfplaneDeg=0.,clipratio=0.75,meshsize=0.6,meshname=None,saveSubFolder=''):
     if meshname is None:
         meshname=stlname
     Laxis = Laxis / np.linalg.norm(Laxis)
@@ -194,7 +196,7 @@ def generateMesh(casePath,stlname,Laxis,endo_angle='',epi_angle='',clipratio=0.7
     isendoflip = True #True
     casedir=casePath+saveSubFolder+"/";  
    
-    ef, es, en, eC, eL, eR = vtk_py.addLVfiber(mesh, fiberFS, "lv", endo_angle, epi_angle, casedir)
+    ef, es, en, eC, eL, eR = vtk_py.addLVfiber(mesh, fiberFS, "lv", endo_angle, epi_angle, casedir,outOfplaneDeg=outOfplaneDeg)
    
     matid_filename = casePath+saveSubFolder+'/'+meshname + "_matid.pvd"
     File(matid_filename) << matid
