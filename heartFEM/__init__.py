@@ -79,13 +79,13 @@ History:
                                                             -heartParameters v3.1.0
                                                             -lcleeHeart v3.1.0
                                                             -added outOfplaneDeg for meshing
-  Author: w.x.chan@gmail.com         10JUL2021           - v3.1.1
-                                                            -ngspice_py v3.1.1
+  Author: w.x.chan@gmail.com         10JUL2021           - v3.1.2
+                                                            -ngspice_py v3.1.2
                                                             -heartParameters v3.1.0
                                                             -lcleeHeart v3.1.0
                                                             -added outOfplaneDeg for meshing
 '''
-_version='3.1.1'
+_version='3.1.2'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
