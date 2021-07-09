@@ -10,9 +10,11 @@ History:
   Author: w.x.chan@gmail.com         21APR2021           - v2.1.0
   Author: w.x.chan@gmail.com         09JUN2021           - v3.0.0
                                                               -added remove "temp_"+lvufilename[:-4] files
+  Author: w.x.chan@gmail.com         10JUL2021           - v3.1.1
+                                                              - debug lvflowrate input run by adding voltage lvgnd2 to gnd as v(lv)
 '''
 ########################################################################
-_version='3.0.0'
+_version='3.1.1'
 import logging
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,10 @@ def simLVcircuit(casename,stopTime,lvufile,lvinputvar='V',initLAvol=0,initRAvol=
     os.system(cmd)
     if lvinputvar=='i' or lvinputvar=='I':
         cmd = "sed -i.bak s/'<<lvinputvar>>'/'I'/g " + cirtempfilename
+        os.system(cmd)
+        cmd = "sed -i.bak s/'Vlvu'/'*Vlvu'/g " + cirtempfilename
+        os.system(cmd)
+        cmd = "sed -i.bak s/'*Elvu'/'Elvu'/g " + cirtempfilename
         os.system(cmd)
     else:
         cmd = "sed -i.bak s/'<<lvinputvar>>'/'V'/g " + cirtempfilename
