@@ -1,4 +1,4 @@
-*version 3.0.0
+*version 3.1.1
 
 .title LV full circuit
 
@@ -85,7 +85,8 @@ Brvvol  rvvol gnd I = -i(Vrvprobe)
 arvvolconvert  rvvol gnd rvvolconvertcap
 .model rvvolconvertcap capacitor (c=1 ic=<<rvinitvol>>)
 
-Blvu   lvgnd  gnd     <<lvinputvar>> = v(lvgenerator)
+Blvu   lvgnd   lvgnd2  <<lvinputvar>> = v(lvgenerator)
+Elvu   lvgnd2  gnd     vol = <<lvbaseV>>
 Ervu   rvgnd2  gnd     vol = 'v(rv)'
 
 Elau   lagnd2  gnd     vol = 'cossq( TIME ,<<laamp>>,<<lapeaktime>>,<<lawidth>>)'
