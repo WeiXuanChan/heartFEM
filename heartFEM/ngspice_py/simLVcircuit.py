@@ -10,11 +10,11 @@ History:
   Author: w.x.chan@gmail.com         21APR2021           - v2.1.0
   Author: w.x.chan@gmail.com         09JUN2021           - v3.0.0
                                                               -added remove "temp_"+lvufilename[:-4] files
-  Author: w.x.chan@gmail.com         10JUL2021           - v3.1.1
+  Author: w.x.chan@gmail.com         10JUL2021           - v3.1.2
                                                               - debug lvflowrate input run by adding voltage lvgnd2 to gnd as v(lv)
 '''
 ########################################################################
-_version='3.1.1'
+_version='3.1.2'
 import logging
 logger = logging.getLogger(__name__)
 
