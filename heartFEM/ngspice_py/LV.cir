@@ -86,7 +86,8 @@ arvvolconvert  rvvol gnd rvvolconvertcap
 .model rvvolconvertcap capacitor (c=1 ic=<<rvinitvol>>)
 
 Blvu   lvgnd   lvgnd2  <<lvinputvar>> = v(lvgenerator)
-Elvu   lvgnd2  gnd     vol = <<lvbaseV>>
+Vlvu   lvgnd   gnd  dc 0
+*Elvu   lvgnd2  gnd     vol = 'v(lv)'
 Ervu   rvgnd2  gnd     vol = 'v(rv)'
 
 Elau   lagnd2  gnd     vol = 'cossq( TIME ,<<laamp>>,<<lapeaktime>>,<<lawidth>>)'
