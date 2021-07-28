@@ -37,13 +37,15 @@ History:
                                                             - debug scale with age
   Author: w.x.chan@gmail.com         08JUL2021           - v3.1.0
                                                             -added 'outOfplaneAngle'
+  Author: w.x.chan@gmail.com         14JUL2021           - v3.3.0
+                                                            -removed outOfplaneDeg and added 'fiberSheetletAngle','fiberSheetletWidth','radialFiberAngle'
 '''
-_version='3.2.0'
+_version='3.3.0'
 import logging
 logger = logging.getLogger(__name__)
 
 parameters_for_FEniCS=['Kspring_constant','Tact_constant','T0_LV','ESV_LV','lr','BCL','Ca0','Ca0max','B','t0','l0','m','b']                 
-parameters_for_mesh=['topid','endoid','epiid','Laxis_X','Laxis_Y','Laxis_Z','clip_ratio','endo_angle','epi_angle','outOfplaneAngle','EDV_LV','EDP_LV']
+parameters_for_mesh=['topid','endoid','epiid','Laxis_X','Laxis_Y','Laxis_Z','clip_ratio','endo_angle','epi_angle','fiberSheetletAngle','fiberSheetletWidth','radialFiberAngle','EDV_LV','EDP_LV']
 WindkesselComponents=['lv','la','rv','ra','aa','ao1','ao2','ao3','ao4','br','ca','ub','he','inte','ivc','kid','leg','lung','pa1','pa2','plac','svc','uv']
 WindkessellinkComponents=['aaao1','ao1ao2','ao2ao3','ao3ao4','pa1pa2','pa2lung','da','ao1ca','cabr','brsvc','ao1ub','ubsvc','ao3he','ao3inte','intehe','ao3kid','kidivc','ao4plac','placuv','ao4leg','legivc','uvhe','heivc','dv','svcra','ivcra','lungla','fo','raravalv','lalavalv','lvlvvalv','rvrvvalv']
 defaultAgeScalePower={'defaultr':-1.,'pa2lungr':-1.2,'lunglar':-1.2,'cabrr':-1.1,'brsvcr':-1.1,'dvr':-0.55,
@@ -136,9 +138,7 @@ class heartParameters(dict):
         self['clip_ratio']=0.95
         
         self['Kspring_constant']=90 #Kspring constant which model as pericardial cavity , unit in Pa
-        
         self['Tact_constant'] = 1e5 #Tact_constant we dont use it, unit is in Pa 
-        self['T0_LV'] = 60e3 #active tension forces unit in Pa
         
         self['EDV_LV'] = 3.004778703264237
         self['EDP_LV'] = None
@@ -148,7 +148,16 @@ class heartParameters(dict):
         
         self['lr'] = 1.85
         
-        self['outOfplaneAngle']=0.
+        self["StrainEnergyDensityFunction_Cff"]=29.9
+        self["StrainEnergyDensityFunction_Css"]=13.3
+        self["StrainEnergyDensityFunction_Cnn"]=13.3
+        self["StrainEnergyDensityFunction_Cns"]=26.6
+        self["StrainEnergyDensityFunction_Cfs"]=53.2
+        self["StrainEnergyDensityFunction_Cfn"]=53.2
+        
+        self['fiberSheetletAngle']=0.
+        self['fiberSheetletWidth']=0.
+        self['radialFiberAngle']=0.
         #Active Material
         if defaultAge[:5]=='adult':
             self['BCL'] = 800.0 #set for the duration of cardiac cycle value is in ms, for fetal is 400ms. for adult is 800ms
@@ -161,6 +170,7 @@ class heartParameters(dict):
             self['b'] = -1600#-1429 #time-intercept of linear relaxation duration-sarcomere length relation, ms
             self['endo_angle']=80.
             self['epi_angle']=-70.
+            self['T0_LV'] = 200.7e3
         else:
             self['BCL'] = 400.0 #set for the duration of cardiac cycle value is in ms, for fetal is 400ms. for adult is 800ms
             self['Ca0'] = 4.35 #peak intracellular calcium concentration, µM
@@ -172,6 +182,7 @@ class heartParameters(dict):
             self['b'] = -1600*0.5#0.5*(m_adult*l0+b_adult)-m_fetal #time-intercept of linear relaxation duration-sarcomere length relation, ms
             self['endo_angle']=60.
             self['epi_angle']=-60.
+            self['T0_LV'] = 60e3
         self.setDefaultWindkessel(defaultAge)
         self.changeDefaultParameters(defaultParameters)
     def setHeartrate(self,beatsperminute):
