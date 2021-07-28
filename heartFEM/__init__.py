@@ -96,7 +96,6 @@ History:
                                                             -ngspice_py v3.1.2
                                                             -heartParameters v3.3.0
                                                             -lcleeHeart v3.4.0
-                                                            -removed outOfplaneDeg and added 'fiberSheetletAngle','fiberSheetletWidth','radialFiberAngle', set fiberlength for meshing as sarcomere length ['lr']
 '''
 _version='3.4.0'
 import logging
