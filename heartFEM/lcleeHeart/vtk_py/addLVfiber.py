@@ -2,7 +2,7 @@ from dolfin import *
 import vtk as vtk
 from heartFEM.lcleeHeart.vtk_py import *
 
-def addLVfiber(mesh, V, casename, endo_angle, epi_angle,  casedir, clipheight=0.05,outOfplaneDeg=0.):
+def addLVfiber(mesh, V, casename, endo_angle, epi_angle,  casedir, clipheight=0.05,fiberSheetletAngle=0.,fiberSheetletWidth=0.,radialFiberAngle=0.,fiberLength=0.):
 
 
 	fiberV = Function(V)
@@ -86,7 +86,7 @@ def addLVfiber(mesh, V, casename, endo_angle, epi_angle,  casedir, clipheight=0.
 
 	CreateVertexFromPoint(ugrid)
 	addLocalProlateSpheroidalDirections(ugrid, pdata_endo, pdata_epi, type_of_support="cell")
-	addLocalFiberOrientation(ugrid, endo_angle, epi_angle,outOfplaneDeg=outOfplaneDeg)
+	addLocalFiberOrientation(ugrid, endo_angle, epi_angle,fiberSheetletAngle=fiberSheetletAngle,fiberSheetletWidth=fiberSheetletWidth,radialFiberAngle=radialFiberAngle,fiberLength=fiberLength)
 
 	fiber_vector =  ugrid.GetCellData().GetArray("fiber vectors")
 	sheet_vector =  ugrid.GetCellData().GetArray("sheet vectors")
