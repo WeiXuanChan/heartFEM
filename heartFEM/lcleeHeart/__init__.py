@@ -38,8 +38,13 @@ History:
                                                             -integrate into heartFEM
   Author: w.x.chan@gmail.com         08JUL2021           - v3.1.0
                                                             -added outOfplaneDeg for meshing
+  Author: w.x.chan@gmail.com         14JUL2021           - v3.3.0
+                                                            -removed outOfplaneDeg and added fiberSheetletAngle,fiberSheetletWidth,radialFiberAngle,fiberLength for meshing
+                                                            -added fiberSheetletAngle,fiberSheetletWidth,radialFiberAngle,fiberLength for changeFiberAngles
+  Author: w.x.chan@gmail.com         28JUL2021           - v3.4.0
+                                                            - added strainEnergy in ulforms 
 '''
-_version='3.1.0'
+_version='3.4.0'
 
 import sys
 
@@ -62,7 +67,7 @@ from mpi4py import MPI as pyMPI
 from heartFEM.lcleeHeart.rotateUGrid_w_axis import rotateUGrid_w_axis
 from pyquaternion import Quaternion
 
-def generateMesh(casePath,stlname,Laxis,endo_angle='',epi_angle='',outOfplaneDeg=0.,clipratio=0.75,meshsize=0.6,meshname=None,saveSubFolder=''):
+def generateMesh(casePath,stlname,Laxis,endo_angle='',epi_angle='',fiberSheetletAngle=0.,fiberSheetletWidth=0.,radialFiberAngle=0.,fiberLength=0.,clipratio=0.75,meshsize=0.6,meshname=None,saveSubFolder=''):
     if meshname is None:
         meshname=stlname
     Laxis = Laxis / np.linalg.norm(Laxis)
@@ -73,10 +78,13 @@ def generateMesh(casePath,stlname,Laxis,endo_angle='',epi_angle='',outOfplaneDeg
 
     C = vtk_py.getcentroid(pdata)
 
-	
     angle = np.arccos(Laxis[2])
-    raxis = np.cross(Laxis, np.array([0,0,1]))
-    raxis = raxis / np.linalg.norm(raxis)
+    if Laxis[2]>0.99:
+        raxis = np.cross(Laxis, np.array([1,0,0]))
+        raxis = raxis / np.linalg.norm(raxis)
+    else:
+        raxis = np.cross(Laxis, np.array([0,0,1]))
+        raxis = raxis / np.linalg.norm(raxis)
 	
     ztop = pdata.GetBounds()[5]
     C = [C[0], C[1], 0.98*ztop+0.02*pdata.GetBounds()[4]]
@@ -194,9 +202,9 @@ def generateMesh(casePath,stlname,Laxis,endo_angle='',epi_angle='',outOfplaneDeg
     fiberFS = FunctionSpace(mesh, VQuadelem)
     isepiflip = True #False
     isendoflip = True #True
-    casedir=casePath+saveSubFolder+"/";  
+    casedir=casePath+saveSubFolder+"/"+meshname+"_";  
    
-    ef, es, en, eC, eL, eR = vtk_py.addLVfiber(mesh, fiberFS, "lv", endo_angle, epi_angle, casedir,outOfplaneDeg=outOfplaneDeg)
+    ef, es, en, eC, eL, eR = vtk_py.addLVfiber(mesh, fiberFS, "lv", endo_angle, epi_angle, casedir,fiberSheetletAngle=fiberSheetletAngle,fiberSheetletWidth=fiberSheetletWidth,radialFiberAngle=radialFiberAngle,fiberLength=fiberLength)
    
     matid_filename = casePath+saveSubFolder+'/'+meshname + "_matid.pvd"
     File(matid_filename) << matid
@@ -251,7 +259,7 @@ def generateMesh(casePath,stlname,Laxis,endo_angle='',epi_angle='',outOfplaneDeg
     
    
     return 0
-def changeFiberAngles(casePath,meshname,endo_angle,epi_angle,saveSubFolder='',loadSubFolder=''):
+def changeFiberAngles(casePath,meshname,endo_angle,epi_angle,fiberSheetletAngle=0.,fiberSheetletWidth=0.,radialFiberAngle=0.,fiberLength=0.,saveSubFolder='',loadSubFolder=''):
     os.makedirs(casePath+saveSubFolder,exist_ok=True)
     mesh = Mesh()
     f = HDF5File(MPI.comm_world, casePath+loadSubFolder+'/'+meshname+".hdf5", 'r') 
@@ -271,12 +279,16 @@ def changeFiberAngles(casePath,meshname,endo_angle,epi_angle,saveSubFolder='',lo
     VQuadelem = VectorElement("Quadrature", mesh.ufl_cell(), degree=quad_deg, quad_scheme="default")
     VQuadelem._quad_scheme = 'default'
     fiberFS = FunctionSpace(mesh, VQuadelem)
-    casedir=casePath+saveSubFolder+"/"
-    ef, es, en, eC, eL, eR = vtk_py.addLVfiber(mesh, fiberFS, "lv", endo_angle, epi_angle, casedir)
+    casedir=casePath+saveSubFolder+"/"+meshname+"_"
+    ef, es, en, eC, eL, eR = vtk_py.addLVfiber(mesh, fiberFS, "lv", endo_angle, epi_angle, casedir,fiberSheetletAngle=fiberSheetletAngle,fiberSheetletWidth=fiberSheetletWidth,radialFiberAngle=radialFiberAngle,fiberLength=fiberLength)
     matid = MeshFunction('size_t',mesh, 3, mesh.domains())
     matid_filename = casePath+saveSubFolder+'/'+meshname + "_matid.pvd"
+    if os.path.isfile(matid_filename):
+        os.remove(matid_filename)
     File(matid_filename) << matid
    	
+    if os.path.isfile(casePath+saveSubFolder+'/'+meshname+".hdf5"):
+        os.remove(casePath+saveSubFolder+'/'+meshname+".hdf5")
     f = HDF5File(mesh.mpi_comm(), casePath+saveSubFolder+'/'+meshname+".hdf5", 'w')
     f.write(mesh, meshname)
     f.close()
@@ -448,7 +460,13 @@ class heart:
         	 "fiber": self.f0,
                  "sheet": self.s0,
                  "sheet-normal": self.n0,
-                 "invF_variable":self.invF}
+                 "invF_variable":self.invF,
+                 "StrainEnergyDensityFunction_Cff":runParameters["StrainEnergyDensityFunction_Cff"],
+                 "StrainEnergyDensityFunction_Css":runParameters["StrainEnergyDensityFunction_Css"],
+                 "StrainEnergyDensityFunction_Cnn":runParameters["StrainEnergyDensityFunction_Cnn"],
+                 "StrainEnergyDensityFunction_Cns":runParameters["StrainEnergyDensityFunction_Cns"],
+                 "StrainEnergyDensityFunction_Cfs":runParameters["StrainEnergyDensityFunction_Cfs"],
+                 "StrainEnergyDensityFunction_Cfn":runParameters["StrainEnergyDensityFunction_Cfn"]}
         
         activeparams = {"mesh": self.mesh,
                         "facetboundaries": self.facetboundaries,

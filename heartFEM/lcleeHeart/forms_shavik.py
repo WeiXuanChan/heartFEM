@@ -93,6 +93,12 @@ class Forms(object):
 		n0 = self.parameters["sheet-normal"]
 		p = self.parameters["pressure_variable"]
         
+		Cff=self.parameters["StrainEnergyDensityFunction_Cff"]
+		Css=self.parameters["StrainEnergyDensityFunction_Css"]
+		Cnn=self.parameters["StrainEnergyDensityFunction_Cnn"]
+		Cns=self.parameters["StrainEnergyDensityFunction_Cns"]
+		Cfs=self.parameters["StrainEnergyDensityFunction_Cfs"]
+		Cfn=self.parameters["StrainEnergyDensityFunction_Cfn"]
 
 		Eff = inner(f0, Ea*f0)
 		Ess = inner(s0, Ea*s0)
@@ -110,7 +116,7 @@ class Forms(object):
 		Ens_inv = inner(n0, Ea_inv*s0)
 		
 		
-		QQ = 29.9*pow(Eff,2.0) + 13.3*(pow(Ess,2.0)+ pow(Enn,2.0)+ 2.0*pow(Ens,2.0)) + 26.6*(2.0*pow(Efs,2.0) + 2.0*pow(Efn,2.0)) #Original
+		QQ = Cff*pow(Eff,2.0) + Css*pow(Ess,2.0)+ Cnn*pow(Enn,2.0)+ Cns*pow(Ens,2.0) + Cfs*pow(Efs,2.0) + Cfn*pow(Efn,2.0) #Original
 		if inverse:  
 		    #pendo = self.parameters["volconst_variable"] 
 		    #V0= self.parameters["constrained_vol"] 
@@ -120,7 +126,31 @@ class Forms(object):
 		    Wp =(100*(exp(QQ) -  1.0) - p*(self.J() - 1.0))*dx(self.parameters["mesh"]) #original
 		return Wp
 
+	def strainEnergy(self):
+	    Ea = self.Emat()
+	    f0 = self.parameters["fiber"]
+	    s0 = self.parameters["sheet"]
+	    n0 = self.parameters["sheet-normal"]
+	    p = self.parameters["pressure_variable"]
+        
+	    Cff=self.parameters["StrainEnergyDensityFunction_Cff"]
+	    Css=self.parameters["StrainEnergyDensityFunction_Css"]
+	    Cnn=self.parameters["StrainEnergyDensityFunction_Cnn"]
+	    Cns=self.parameters["StrainEnergyDensityFunction_Cns"]
+	    Cfs=self.parameters["StrainEnergyDensityFunction_Cfs"]
+	    Cfn=self.parameters["StrainEnergyDensityFunction_Cfn"]
 
+	    Eff = inner(f0, Ea*f0)
+	    Ess = inner(s0, Ea*s0)
+	    Enn = inner(n0, Ea*n0)
+	    Efs = inner(f0, Ea*s0)
+	    Efn = inner(f0, Ea*n0)
+	    Ens = inner(n0, Ea*s0)
+        
+		
+	    QQ = Cff*pow(Eff,2.0) + Css*pow(Ess,2.0)+ Cnn*pow(Enn,2.0)+ Cns*pow(Ens,2.0) + Cfs*pow(Efs,2.0) + Cfn*pow(Efn,2.0) #Original
+	    Wp = 100*(exp(QQ) -  1.0) - p*(J - 1.0)
+	    return Wp
 
 	def EmatECC(self):
 		Ea = self.Emat()
