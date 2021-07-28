@@ -84,8 +84,21 @@ History:
                                                             -heartParameters v3.1.0
                                                             -lcleeHeart v3.1.0
                                                             -added outOfplaneDeg for meshing
+  Author: w.x.chan@gmail.com         10JUL2021           - v3.3.0
+                                                            -debugged for adjust fibers after ALE.move
+                                                            - remove "self.manualVol is not None" condition to not do unloading
+                                                            -ngspice_py v3.1.2
+                                                            -heartParameters v3.3.0
+                                                            -lcleeHeart v3.3.0
+                                                            -removed outOfplaneDeg and added 'fiberSheetletAngle','fiberSheetletWidth','radialFiberAngle', set fiberlength for meshing as sarcomere length ['lr']
+  Author: w.x.chan@gmail.com         28JUL2021           - v3.4.0
+                                                            - added fenicsResultWriter
+                                                            -ngspice_py v3.1.2
+                                                            -heartParameters v3.3.0
+                                                            -lcleeHeart v3.4.0
+                                                            -removed outOfplaneDeg and added 'fiberSheetletAngle','fiberSheetletWidth','radialFiberAngle', set fiberlength for meshing as sarcomere length ['lr']
 '''
-_version='3.1.2'
+_version='3.4.0'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
@@ -208,6 +221,7 @@ class LVclosed:
         self.manualVolFiletimescale=timescale
         self.manualVolFilevolscale=volscale
         self.manualVol=self.getVolumeFromFile
+        
     def getphaseFromFile(self,time):
         try:
             data=np.loadtxt(self.manualPhaseTimeFile)
@@ -318,7 +332,7 @@ class LVclosed:
         self.defaultParameters['Laxis_Y']=Laxis[1]
         self.defaultParameters['Laxis_Z']=Laxis[2]
         logger.info('Estimated Laxis as '+repr(Laxis))
-    def generateMesh(self,Laxis=None,endo_angle='',epi_angle='',outOfplaneDeg=0.,clipratio=0.95,meshsize=0.6,saveaddstr='',toRunCountFolder=False):
+    def generateMesh(self,Laxis=None,endo_angle='',epi_angle='',fiberSheetletAngle=0.,fiberSheetletWidth=0.,radialFiberAngle=0.,fiberLength=0.,clipratio=0.95,meshsize=0.6,saveaddstr='',toRunCountFolder=False):
         if Laxis is None:
             Laxis=np.array([np.array([self.defaultParameters['Laxis_X'],self.defaultParameters['Laxis_Y'],self.defaultParameters['Laxis_Z']])])
         if toRunCountFolder:
@@ -327,9 +341,9 @@ class LVclosed:
                     toRunCountFolder='/'+toRunCountFolder
             else:
                 toRunCountFolder='/'+str(self.runCount)
-            return lcleeHeart.generateMesh(self.casename,self.meshname,Laxis,endo_angle=endo_angle,epi_angle=epi_angle,outOfplaneDeg=outOfplaneDeg,clipratio=clipratio,meshsize=meshsize,meshname=self.meshname+saveaddstr,saveSubFolder=toRunCountFolder)
+            return lcleeHeart.generateMesh(self.casename,self.meshname,Laxis,endo_angle=endo_angle,epi_angle=epi_angle,fiberSheetletAngle=fiberSheetletAngle,fiberSheetletWidth=fiberSheetletWidth,radialFiberAngle=radialFiberAngle,fiberLength=fiberLength,clipratio=clipratio,meshsize=meshsize,meshname=self.meshname+saveaddstr,saveSubFolder=toRunCountFolder)
         else:
-            return lcleeHeart.generateMesh(self.casename,self.meshname,Laxis,endo_angle=endo_angle,epi_angle=epi_angle,outOfplaneDeg=outOfplaneDeg,clipratio=clipratio,meshsize=meshsize,meshname=self.meshname+saveaddstr)
+            return lcleeHeart.generateMesh(self.casename,self.meshname,Laxis,endo_angle=endo_angle,epi_angle=epi_angle,fiberSheetletAngle=fiberSheetletAngle,fiberSheetletWidth=fiberSheetletWidth,radialFiberAngle=radialFiberAngle,fiberLength=fiberLength,clipratio=clipratio,meshsize=meshsize,meshname=self.meshname+saveaddstr)
     def runWinkessel(self,comm,tstep,dt_dt,*args):
         if self.LVage=='adult':
             #args=(p_cav,V_cav,V_art,V_ven,V_LA)
@@ -716,6 +730,7 @@ class LVclosed:
         fenics.File(casename+saveFolder+'/'+savename + "_edgeboundaries"+".pvd") << edgeboundaries
         fenics.File(casename+saveFolder+'/'+savename + "_mesh" + ".pvd") << heart.mesh
         fenics.File(casename+saveFolder+'/'+savename + "_matid" +".pvd") << matid
+        
     def adjustMeshToPressure(self,casename,meshname,targetPressure,savename=None,softAdjust=float('inf'),usePrevious=3,iterationNumber=float('inf'),initHeart=None,prevDeform=None,saveFolder='',tolerance=10.**-4.):
         #set usePrevious to False or 0 to not use previous mesh for deformation, set True to use previous mesh only and set a number to use previous mesh a number of times is it doesnt converge
         if not(isinstance(usePrevious,bool)):
@@ -767,6 +782,7 @@ class LVclosed:
                 newDeform.vector()[:]+=prevDeformVectors
                 fenics.ALE.move(heart.mesh,newDeform)
                 self.savehdf5(heart,casename,meshname,'tempadjmesh_'+meshname,saveFolder=saveFolder)
+                lcleeHeart.changeFiberAngles(casename,'tempadjmesh_'+meshname,runParameters['endo_angle'],runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],saveSubFolder=saveFolder,loadSubFolder=saveFolder)
             else:
                 refHeart=lcleeHeart.heart(casename,meshname,runParameters)
                 newDeform=refHeart.w.sub(0).copy(deepcopy=True)
@@ -774,6 +790,7 @@ class LVclosed:
                 newDeform.vector()[:]-=heart.w.sub(0).vector()[:]
                 fenics.ALE.move(refHeart.mesh,newDeform)
                 self.savehdf5(refHeart,casename,meshname,'tempadjmesh_'+meshname,saveFolder=saveFolder)
+                lcleeHeart.changeFiberAngles(casename,'tempadjmesh_'+meshname,runParameters['endo_angle'],runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],saveSubFolder=saveFolder,loadSubFolder=saveFolder)
             prevDeformVectors=deformVectors.copy()
             heart=lcleeHeart.heart(casename+saveFolder,'tempadjmesh_'+meshname,runParameters)
             logging.info('newheart starting volume ='+repr(heart.uflforms.cavityvol()))
@@ -792,12 +809,14 @@ class LVclosed:
         logging.info('Final heart volume ='+repr(heart.uflforms.cavityvol()))
         if savename is not None:
             self.savehdf5(heart,casename,meshname,savename,saveFolder=saveFolder)
+            lcleeHeart.changeFiberAngles(casename,savename,runParameters['endo_angle'],runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],saveSubFolder=saveFolder,loadSubFolder=saveFolder)
         if not(usePrevious) and (usePreviousiteration>0) and (abs(heart.uflforms.cavitypressure()*0.0075/targetPressure-1)>10**-4. or abs(heart.uflforms.cavityvol()/targetVolume-1)>10**-4.):
             newDeform=heart.w.sub(0).copy(deepcopy=True)
             newDeform.vector()[:]*=-1
             newDeform.vector()[:]+=prevDeformVectors
             fenics.ALE.move(heart.mesh,newDeform)
             self.savehdf5(heart,casename,meshname,'tempadjmesh_'+meshname,saveFolder=saveFolder)
+            lcleeHeart.changeFiberAngles(casename,'tempadjmesh_'+meshname,runParameters['endo_angle'],runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],saveSubFolder=saveFolder,loadSubFolder=saveFolder)
             heart=lcleeHeart.heart(casename+saveFolder,'tempadjmesh_'+meshname,runParameters)
             logging.info('newheart starting volume ='+repr(heart.uflforms.cavityvol()))
             logging.info('trying usePrevious = True')
@@ -823,6 +842,7 @@ class LVclosed:
         #heart.mesh.smooth(20)
         fenics.ALE.move(heart.mesh,heart.w.sub(0))
         self.savehdf5(heart,casename,meshname,'tempadjmesh_'+meshname)
+        lcleeHeart.changeFiberAngles(casename,'tempadjmesh_'+meshname,runParameters['endo_angle'],runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'])
         heart=lcleeHeart.heart(casename,'tempadjmesh_'+meshname,runParameters)
         logger.info("PLV = "+repr(heart.uflforms.cavitypressure()*.0075)+" VLV = "+repr(heart.uflforms.cavityvol()))
         self.solvePressure(heart,targetPressure,voladj=0.05)
@@ -841,6 +861,7 @@ class LVclosed:
             #heart.mesh.smooth(20)
             fenics.ALE.move(heart.mesh,heart.w.sub(0))
             self.savehdf5(heart,casename,meshname,'tempadjmesh_'+meshname)
+            lcleeHeart.changeFiberAngles(casename,'tempadjmesh_'+meshname,runParameters['endo_angle'],runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'])
             heart=lcleeHeart.heart(casename,'tempadjmesh_'+meshname,runParameters)
         
             self.solvePressure(heart,targetPressure,voladj=0.05)#,maxVolumeBreak=heart.uflforms.cavityvol()*1.031)
@@ -855,6 +876,7 @@ class LVclosed:
                 break
         if savename is not None:
             self.savehdf5(heart,casename,meshname,savename)
+            lcleeHeart.changeFiberAngles(casename,savename,runParameters['endo_angle'],runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'])
         return heart
     
     def getHeartCoords(self,casename,meshname,time):
@@ -891,6 +913,7 @@ class LVclosed:
         deform_vectors=deform.vector()[:].copy()
         fenics.ALE.move(heart.mesh,deform)
         self.savehdf5(heart,casename,meshname,'tempadjmesh_'+meshname,saveFolder=saveFolder)
+        lcleeHeart.changeFiberAngles(casename,'tempadjmesh_'+meshname,runParameters['endo_angle'],runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],saveSubFolder=saveFolder,loadSubFolder=saveFolder)
         
         maxadjustmentsq=None
         newheartVol=heart.uflforms.cavityvol()
@@ -924,7 +947,7 @@ class LVclosed:
             deform.vector()[:]=deform_vectors.copy()
             fenics.ALE.move(originalHeart.mesh,deform)
             self.savehdf5(originalHeart,casename,meshname,'tempadjmesh_'+meshname,saveFolder=saveFolder)
-            
+            lcleeHeart.changeFiberAngles(casename,'tempadjmesh_'+meshname,runParameters['endo_angle'],runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],saveSubFolder=saveFolder,loadSubFolder=saveFolder)
             
             refHeart=lcleeHeart.heart(casename+saveFolder,'tempadjmesh_'+meshname,runParameters)
             logging.info('New start Volume = '+repr(refHeart.uflforms.cavityvol()))
@@ -941,6 +964,7 @@ class LVclosed:
         logging.info('Final heart volume ='+repr(refHeart.uflforms.cavityvol()))
         if savename is not None:
             self.savehdf5(refHeart,casename,meshname,savename,saveFolder=saveFolder)
+            lcleeHeart.changeFiberAngles(casename,savename,runParameters['endo_angle'],runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],saveSubFolder=saveFolder,loadSubFolder=saveFolder)
         return refHeart
     def getUnloadedGeometry(self,editParameters=None,casename=None,meshname=None,targetPressure=None,targetVolume=None,tryPressureRatio=0.2,targetMeshCoords=None,savename=None,iterationNumber=0,toRunCountFolder=False,inverseHeart=True):
         #when targetMeshCoords is not None, set target pressure as the maximum pressure to try
@@ -985,7 +1009,8 @@ class LVclosed:
         else:
             heart=self.adjustMeshToPressure(casename,meshname,tryPressure,savename=savename,usePrevious=0,iterationNumber=iterationNumber,saveFolder=toRunCountFolder)
         self.savehdf5(heart,casename,meshname,'tempadjmesh_'+meshname,saveFolder=toRunCountFolder)
-            
+        lcleeHeart.changeFiberAngles(casename,'tempadjmesh_'+meshname,runParameters['endo_angle'],runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],saveSubFolder=toRunCountFolder,loadSubFolder=toRunCountFolder)
+        
         heart=lcleeHeart.heart(casename+toRunCountFolder,'tempadjmesh_'+meshname,runParameters)
         self.solveVolume(heart,targetVolume,voladj=0.05)
         
@@ -1019,6 +1044,7 @@ class LVclosed:
             else:
                 heart=self.adjustMeshToPressure(casename,meshname,tryPressure,savename=savename,usePrevious=0,iterationNumber=iterationNumber,saveFolder=toRunCountFolder,tolerance=10.**-3)
             self.savehdf5(heart,casename,meshname,'tempadjmesh_'+meshname,saveFolder=toRunCountFolder)
+            lcleeHeart.changeFiberAngles(casename,'tempadjmesh_'+meshname,runParameters['endo_angle'],runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],saveSubFolder=toRunCountFolder,loadSubFolder=toRunCountFolder)
             heart=lcleeHeart.heart(casename+toRunCountFolder,'tempadjmesh_'+meshname,runParameters)
             self.solveVolume(heart,targetVolume,voladj=0.05)
             if targetMeshCoords is not None:
@@ -1034,6 +1060,7 @@ class LVclosed:
             if adjtryPressure<10**-3:
                 break
         self.savehdf5(heart,casename,meshname,savename,saveFolder=toRunCountFolder)
+        lcleeHeart.changeFiberAngles(casename,savename,runParameters['endo_angle'],runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],saveSubFolder=toRunCountFolder,loadSubFolder=toRunCountFolder)
         return heart
     def writeRunParameters(self,folder,runParameters):
         os.makedirs(folder,exist_ok=True)
@@ -1105,7 +1132,7 @@ class LVclosed:
         else:
             editParameters={}
         self.getLVbehavior(runParameters=runParameters,meshname=meshname,meshFolder=meshFolder,volstep=volstep,extendVol=extendVol,minESV=minESV,maxEDV=maxEDV,saveaddstr=saveaddstr,voladj=voladj,starttime=float(int(runParameters['t0'])),endtime=float(int(runParameters['t0'])),toRunCountFolder=toRunCountFolder)
-    def unloadedGeometryRun(self,editParameters=None,inverseHeart=True):
+    def unloadedGeometryRun(self,editParameters=None,inverseHeart=True,tryPressureRatio=0.2):
         runParameters=self.defaultParameters.copy()
         if editParameters is not None:
             for key in runParameters:
@@ -1116,18 +1143,20 @@ class LVclosed:
         self.writeRunParameters(self.casename+"/"+str(self.runCount),runParameters)
         #if self.runCount<=4:
         #    return runParameters
-        self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],outOfplaneDeg=runParameters['outOfplaneAngle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=True)
+        self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],clipratio=runParameters['clip_ratio'],toRunCountFolder=True)
         heartRef=lcleeHeart.heart(self.casename+"/"+str(self.runCount),self.meshname,runParameters)
         volRef=heartRef.uflforms.cavityvol()
-        heart=self.getUnloadedGeometry(editParameters=runParameters,casename=self.casename+"/"+str(self.runCount),savename=self.meshname+'_unloadedmesh',toRunCountFolder=False,inverseHeart=inverseHeart)
+        heart=self.getUnloadedGeometry(editParameters=runParameters,casename=self.casename+"/"+str(self.runCount),savename=self.meshname+'_unloadedmesh',toRunCountFolder=False,inverseHeart=inverseHeart,tryPressureRatio=tryPressureRatio)
         self.solveVolume(heart,runParameters['EDV_LV'],voladj=0.05)
         fenics.ALE.move(heart.mesh,heart.w.sub(0))
         np.savetxt(self.casename+"/"+str(self.runCount)+"/coordsDiaMesh.txt",heart.mesh.coordinates()[:])
         self.savehdf5(heart,self.casename+"/"+str(self.runCount),self.meshname+'_unloadedmesh',self.meshname+'_unloadedmesh_atDiastole')
+        lcleeHeart.changeFiberAngles(self.casename+"/"+str(self.runCount),self.meshname+'_unloadedmesh_atDiastole',runParameters['endo_angle'],runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'])
         heart=lcleeHeart.heart(self.casename+"/"+str(self.runCount),self.meshname+'_unloadedmesh',runParameters)
         self.solveVolume(heart,volRef,voladj=0.05)
         fenics.ALE.move(heart.mesh,heart.w.sub(0))
         self.savehdf5(heart,self.casename+"/"+str(self.runCount),self.meshname+'_unloadedmesh',self.meshname+'_unloadedmesh_at'+self.meshname)
+        lcleeHeart.changeFiberAngles(self.casename+"/"+str(self.runCount),self.meshname+'_unloadedmesh_at'+self.meshname,runParameters['endo_angle'],runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'])
         return runParameters
     def LVbehaviorRun(self,editParameters=None,unloadGeo=True,folderToLVbehavior=None):
         #if using displacement to get unloaded geometry, set unloadGeo='displacement'
@@ -1143,9 +1172,9 @@ class LVclosed:
             editParameters={}
         self.writeRunParameters(self.casename+"/"+str(self.runCount),runParameters)
         if min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
-            self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],outOfplaneDeg=runParameters['outOfplaneAngle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=True)
+            self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],clipratio=runParameters['clip_ratio'],toRunCountFolder=True)
         elif not(os.path.isfile(self.casename+'/'+self.meshname+'.hdf5')):
-            self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],outOfplaneDeg=runParameters['outOfplaneAngle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=False)
+            self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],clipratio=runParameters['clip_ratio'],toRunCountFolder=False)
         if unloadGeo:
             meshname=self.meshname+'_unloadedmesh'
         else:
@@ -1257,7 +1286,7 @@ class LVclosed:
         cir_results=cir_results[cir_results[:,0]<runParameters['BCL']]
         np.savetxt(self.casename+"/"+str(self.runCount)+'/'+'circuit_results_lastcycle.txt',cir_results,header=cir_results_header)
         return runParameters
-    def iterativeRun(self,editParameters=None,runTimeList=None,endTime=None,manualPhaseTimeInput=False,setHeart=None):
+    def iterativeRun(self,editParameters=None,runTimeList=None,endTime=None,manualPhaseTimeInput=False,setHeart=None,outputResultList=None):
         '''
         setHeart: list or lcleeHeart object: list [folder name, meshname]
         '''
@@ -1270,14 +1299,19 @@ class LVclosed:
             editParameters={}
         self.writeRunParameters(self.casename+"/"+str(self.runCount),runParameters)
         os.makedirs(self.casename+"/"+str(self.runCount)+"/stress",exist_ok=True)
-        if min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
-            self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],outOfplaneDeg=runParameters['outOfplaneAngle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=True)
-        elif not(os.path.isfile(self.casename+'/'+self.meshname+'.hdf5')):
-            self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],outOfplaneDeg=runParameters['outOfplaneAngle'],clipratio=runParameters['clip_ratio'],toRunCountFolder=False)
-        
-        displacementfile = fenics.File(self.casename+"/"+str(self.runCount)+"/deformation/u_disp.pvd")
-        #activestressfile = fenics.File(self.casename+"/"+str(self.runCount)+"/activestress/stress.pvd") #CW
-        stress_File = fenics.File(self.casename+"/"+str(self.runCount)+"/stress/_stress.pvd") #Joy Changed here
+        if setHeart is None:
+            if min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
+                self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],clipratio=runParameters['clip_ratio'],toRunCountFolder=True)
+            elif not(os.path.isfile(self.casename+'/'+self.meshname+'.hdf5')):
+                self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],clipratio=runParameters['clip_ratio'],toRunCountFolder=False)
+        if outputResultList is None:
+            resultWriter=fenicsResultWriter(self.casename+"/"+str(self.runCount),['deformation','stress'])
+        elif isinstance(outputResultList,str):
+            resultWriter=fenicsResultWriter(self.casename+"/"+str(self.runCount),[outputResultList])
+        else:
+            resultWriter=fenicsResultWriter(self.casename+"/"+str(self.runCount),outputResultList)
+        #displacementfile = fenics.File(self.casename+"/"+str(self.runCount)+"/deformation/u_disp.pvd")
+        #stress_File = fenics.File(self.casename+"/"+str(self.runCount)+"/stress/_stress.pvd") #Joy Changed here
 
         
         ########################### Fenics's Newton  #########################################################
@@ -1313,7 +1347,7 @@ class LVclosed:
             else:
                 heart=setHeart
             
-        elif runParameters['EDP_LV'] is None or self.manualVol is not None:
+        elif runParameters['EDP_LV'] is None:
             if min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
                 heart=lcleeHeart.heart(self.casename+'/'+str(self.runCount),self.meshname,runParameters)
             else:
@@ -1336,9 +1370,8 @@ class LVclosed:
         Pcav_array = [heart.uflforms.cavitypressure()*0.0075]
         #Joy Changed from here
         #Stress calculation 
-        cauchy1 =  heart.uflforms.Cauchy1() + heart.activeforms.cauchy()
-        cauchy = fenics.project(cauchy1,fenics.TensorFunctionSpace(heart.mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
-        cauchy.rename("cauchy_stress","cauchy_stress")
+        
+
         ###stress_File << cauchy ## wei xuan remove
         if(fenics.MPI.rank(heart.comm) == 0): #added to output the volume, stroke volume data before the while loop
             fdataPV = open(self.casename+"/"+str(self.runCount)+"/PV_.txt", "w")
@@ -1353,14 +1386,18 @@ class LVclosed:
         	logger.info("Cycle number = "+repr(cycle)+ " cell time = "+repr(t)+ " tstep = "+repr(tstep)+" dt = "+repr(heart.dt.dt))
         	print(tstep, p_cav*0.0075 , V_cav, file=fdataPV)
 
-
-        if(fenics.MPI.rank(heart.comm) == 0):
-            displacementfile << heart.w.sub(0)
+        
+        #if(fenics.MPI.rank(heart.comm) == 0):
+        #    displacementfile << heart.w.sub(0)
         #Joy changed  from here
+        #cauchy1 =  heart.uflforms.Cauchy1() + heart.activeforms.cauchy()
+        #cauchy = fenics.project(cauchy1,fenics.TensorFunctionSpace(heart.mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
+        #cauchy.rename("cauchy_stress","cauchy_stress")
+        #stress_File << cauchy
+        
+        resultWriter(heart)
+        cauchy1 =  heart.uflforms.Cauchy1() + heart.activeforms.cauchy()
         cauchy = fenics.project(cauchy1,fenics.TensorFunctionSpace(heart.mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
-        cauchy.rename("cauchy_stress","cauchy_stress")
-        stress_File << cauchy
-
         sigma_fiber_LV = heart.activeforms.CalculateFiberStress(sigma = cauchy, e_fiber = heart.f0, Vol = heart.mesh_volume, Mesh = heart.mesh)
        
        	#Joy chnaged till here
@@ -1445,15 +1482,18 @@ class LVclosed:
         	if(fenics.MPI.rank(heart.comm) == 0):
         		print(heart.t_a.t_a, min(ls1), max(ls1), min(eca), max(eca), min(t_r), max(t_r), file=fdatals)
 
-        	if(fenics.MPI.rank(heart.comm) == 0):
-        		displacementfile << heart.w.sub(0)
+        	#if(fenics.MPI.rank(heart.comm) == 0):
+        	#	displacementfile << heart.w.sub(0)
         	#Joy Chnaged from here
-        	cauchy = fenics.project(cauchy1,fenics.TensorFunctionSpace(heart.mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
-        	cauchy.rename("cauchy_stress","cauchy_stress")
+        	#cauchy = fenics.project(cauchy1,fenics.TensorFunctionSpace(heart.mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
+        	#cauchy.rename("cauchy_stress","cauchy_stress")
         	#print (cauchy)
         	#print (cauchy.vector().array()[:])
-        	stress_File << cauchy
+        	#stress_File << cauchy
   
+        	resultWriter(heart)
+        	cauchy1 =  heart.uflforms.Cauchy1() + heart.activeforms.cauchy()
+        	cauchy = fenics.project(cauchy1,fenics.TensorFunctionSpace(heart.mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
         	sigma_fiber_LV = heart.activeforms.CalculateFiberStress(sigma = cauchy, e_fiber = heart.f0, Vol = heart.mesh_volume, Mesh = heart.mesh)
         
         	if(fenics.MPI.rank(heart.comm) == 0):
@@ -1485,7 +1525,78 @@ class LVclosed:
         	fdata_stress.close() #Joy Changed here	
         ######################################################################################################
         return runParameters
-        
+class fenicsResultWriter:
+    def __new__(cls, *args, **kwargs):
+        return super().__new__(cls)
+    def __init__(self,savePath,outputResultList):
+        self.savePath
+        self.displacementFile=None
+        self.stressFile=None
+        if "displacement" in outputResultList:
+            self.displacementFile = fenics.File(self.savePath+"/deformation/u_disp.pvd")
+        if "stress" in outputResultList:
+            self.stressFile = fenics.File(self.savePath+"/stress/_stress.pvd") #Joy Changed here
+        if "strain" in outputResultList:
+            self.strainFile = []
+            for n in ['ff','ss','nn','fs','fn','ns']:
+                self.strainFile.append(fenics.File(self.savePath+"/strain/_strain_"+n+".pvd"))
+        if "work" in outputResultList:
+            self.workFile = fenics.File(self.savePath+"/work/_work.pvd")
+        if "fiber" in outputResultList:
+            self.fiberFile=[]
+            for n in ['ff','ss','nn']:
+                self.fiberFile.append(fenics.File(self.savePath+"/fiber/_fiber_"+n+".pvd"))
+    def __call__(self,heart):
+        if(fenics.MPI.rank(heart.comm) == 0):
+            if self.displacementFile is not None:
+                self.displacementFile << heart.w.sub(0)
+            if self.stressFile is not None:
+                cauchy1 =  heart.uflforms.Cauchy1() + heart.activeforms.cauchy()
+                cauchy = fenics.project(cauchy1,fenics.TensorFunctionSpace(heart.mesh, "DG", 1), form_compiler_parameters={"representation":"uflacs"})
+                cauchy.rename("cauchy_stress","cauchy_stress")
+                self.stressFile << cauchy
+            if self.strainFile is not None:
+                Ea=heart.uflforms.Emat()
+                f0 = heart.uflforms.parameters["fiber"]
+                s0 = heart.uflforms.parameters["sheet"]
+                n0 = heart.uflforms.parameters["sheet-normal"]
+                Eff = fenics.project(fenics.inner(f0, Ea*f0),fenics.FunctionSpace(heart.mesh, "CG", 1), form_compiler_parameters={"representation":"uflacs"})
+                Eff.rename("Eff_strain","Eff_strain")
+                self.strainFile[0] << Eff
+                Ess = fenics.project(fenics.inner(s0, Ea*s0),fenics.FunctionSpace(heart.mesh, "CG", 1), form_compiler_parameters={"representation":"uflacs"})
+                Ess.rename("Ess_strain","Ess_strain")
+                self.strainFile[1] << Ess
+                Enn = fenics.project(fenics.inner(n0, Ea*n0),fenics.FunctionSpace(heart.mesh, "CG", 1), form_compiler_parameters={"representation":"uflacs"})
+                Enn.rename("Enn_strain","Enn_strain")
+                self.strainFile[2] << Enn
+                Efs = fenics.project(fenics.inner(f0, Ea*s0),fenics.FunctionSpace(heart.mesh, "CG", 1), form_compiler_parameters={"representation":"uflacs"})
+                Efs.rename("Efs_strain","Efs_strain")
+                self.strainFile[3] << Efs
+                Efn = fenics.project(fenics.inner(f0, Ea*n0),fenics.FunctionSpace(heart.mesh, "CG", 1), form_compiler_parameters={"representation":"uflacs"})
+                Efn.rename("Efn_strain","Efn_strain")
+                self.strainFile[4] << Efn
+                Ens = fenics.project(fenics.inner(n0, Ea*s0),fenics.FunctionSpace(heart.mesh, "CG", 1), form_compiler_parameters={"representation":"uflacs"})
+                Ens.rename("Ens_strain","Ens_strain")
+                self.strainFile[5] << Ens
+            if self.workFile is not None:
+                work1=heart.uflforms.strainEnergy()
+                work=fenics.project(work1,fenics.FunctionSpace(heart.mesh, "CG", 1), form_compiler_parameters={"representation":"uflacs"})
+                work.rename("work","work")
+                self.workFile << work
+            if self.fiberFile is not None:
+                Fmat1=heart.uflforms.Fmat()
+                f0 = heart.uflforms.parameters["fiber"]
+                s0 = heart.uflforms.parameters["sheet"]
+                n0 = heart.uflforms.parameters["sheet-normal"]
+                fiber_ff = fenics.project(Fmat1*f0,fenics.VectorFunctionSpace(heart.mesh, "CG", 1), form_compiler_parameters={"representation":"uflacs"})
+                fiber_ff.rename("fiber_ff","fiber_ff")
+                self.fiberFile[0] << fiber_ff
+                fiber_ss = fenics.project(Fmat1*s0,fenics.VectorFunctionSpace(heart.mesh, "CG", 1), form_compiler_parameters={"representation":"uflacs"})
+                fiber_ss.rename("fiber_ss","fiber_ss")
+                self.fiberFile[1] << fiber_ss
+                fiber_nn = fenics.project(Fmat1*n0,fenics.VectorFunctionSpace(heart.mesh, "CG", 1), form_compiler_parameters={"representation":"uflacs"})
+                fiber_nn.rename("fiber_nn","fiber_nn")
+                self.fiberFile[2] << fiber_nn
 class optimiser_linker:
     def __new__(cls, *args, **kwargs):
         return super().__new__(cls)
