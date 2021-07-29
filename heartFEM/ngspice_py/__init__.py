@@ -54,7 +54,8 @@ History:
                                                             -simLVcircuit v3.1.2
                                                             -generateLVtable v2.3.4
                                                             -simLVcircuit_alignEStime v2.1.0
-                                                            -LV.cir v3.4.0
+                                                            -LV.cir v3.4.0 
+                                                               -debugged Vlvu connection from lvgnd2 (previously lvgnd) to gnd
 '''
 _version='3.4.0'
 
