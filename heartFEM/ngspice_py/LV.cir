@@ -86,7 +86,7 @@ arvvolconvert  rvvol gnd rvvolconvertcap
 .model rvvolconvertcap capacitor (c=1 ic=<<rvinitvol>>)
 
 Blvu   lvgnd   lvgnd2  <<lvinputvar>> = v(lvgenerator)
-Vlvu   lvgnd   gnd  dc 0
+Vlvu   lvgnd2   gnd  dc 0
 *Elvu   lvgnd2  gnd     vol = 'v(lv)'
 Ervu   rvgnd2  gnd     vol = 'v(rv)'
 
