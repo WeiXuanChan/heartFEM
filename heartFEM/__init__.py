@@ -93,7 +93,7 @@ History:
                                                             -removed outOfplaneDeg and added 'fiberSheetletAngle','fiberSheetletWidth','radialFiberAngle', set fiberlength for meshing as sarcomere length ['lr']
   Author: w.x.chan@gmail.com         28JUL2021           - v3.4.0
                                                             - added fenicsResultWriter
-                                                            -ngspice_py v3.1.2
+                                                            -ngspice_py v3.4.0
                                                             -heartParameters v3.3.0
                                                             -lcleeHeart v3.4.0
 '''
