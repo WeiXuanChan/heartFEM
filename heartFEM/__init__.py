@@ -91,13 +91,13 @@ History:
                                                             -heartParameters v3.3.0
                                                             -lcleeHeart v3.3.0
                                                             -removed outOfplaneDeg and added 'fiberSheetletAngle','fiberSheetletWidth','radialFiberAngle', set fiberlength for meshing as sarcomere length ['lr']
-  Author: w.x.chan@gmail.com         28JUL2021           - v3.4.0
+  Author: w.x.chan@gmail.com         28JUL2021           - v3.4.1
                                                             - added fenicsResultWriter
                                                             -ngspice_py v3.4.0
                                                             -heartParameters v3.3.0
                                                             -lcleeHeart v3.4.0
 '''
-_version='3.4.0'
+_version='3.4.1'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
@@ -1528,9 +1528,12 @@ class fenicsResultWriter:
     def __new__(cls, *args, **kwargs):
         return super().__new__(cls)
     def __init__(self,savePath,outputResultList):
-        self.savePath
+        self.savePath=savePath
         self.displacementFile=None
         self.stressFile=None
+        self.strainFile=None
+        self.workFile=None
+        self.fiberFile=None
         if "displacement" in outputResultList:
             self.displacementFile = fenics.File(self.savePath+"/deformation/u_disp.pvd")
         if "stress" in outputResultList:
