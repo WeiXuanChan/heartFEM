@@ -126,7 +126,7 @@ class Forms(object):
 		    Wp =(100*(exp(QQ) -  1.0) - p*(self.J() - 1.0))*dx(self.parameters["mesh"]) #original
 		return Wp
 
-	def strainEnergy(self):
+	def strainEnergy(self, integrate=False):
 	    Ea = self.Emat()
 	    f0 = self.parameters["fiber"]
 	    s0 = self.parameters["sheet"]
@@ -149,7 +149,10 @@ class Forms(object):
         
 		
 	    QQ = Cff*pow(Eff,2.0) + Css*pow(Ess,2.0)+ Cnn*pow(Enn,2.0)+ Cns*pow(Ens,2.0) + Cfs*pow(Efs,2.0) + Cfn*pow(Efn,2.0) #Original
-	    Wp = 100*(exp(QQ) -  1.0) - p*(J - 1.0)
+	    if integrate:
+		    Wp = (100*(exp(QQ) -  1.0))*dx(self.parameters["mesh"])
+	    else:
+		    Wp = 100*(exp(QQ) -  1.0)
 	    return Wp
 
 	def EmatECC(self):
