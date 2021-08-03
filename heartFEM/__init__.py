@@ -91,13 +91,13 @@ History:
                                                             -heartParameters v3.3.0
                                                             -lcleeHeart v3.3.0
                                                             -removed outOfplaneDeg and added 'fiberSheetletAngle','fiberSheetletWidth','radialFiberAngle', set fiberlength for meshing as sarcomere length ['lr']
-  Author: w.x.chan@gmail.com         28JUL2021           - v3.4.1
+  Author: w.x.chan@gmail.com         28JUL2021           - v3.4.2
                                                             - added fenicsResultWriter
                                                             -ngspice_py v3.4.0
                                                             -heartParameters v3.3.0
-                                                            -lcleeHeart v3.4.0
+                                                            -lcleeHeart v3.4.2
 '''
-_version='3.4.1'
+_version='3.4.2'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
@@ -1297,7 +1297,7 @@ class LVclosed:
         else:
             editParameters={}
         self.writeRunParameters(self.casename+"/"+str(self.runCount),runParameters)
-        os.makedirs(self.casename+"/"+str(self.runCount)+"/stress",exist_ok=True)
+        
         if setHeart is None:
             if min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
                 self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],clipratio=runParameters['clip_ratio'],toRunCountFolder=True)
@@ -1378,13 +1378,12 @@ class LVclosed:
             fdataSV = open(self.casename+"/"+str(self.runCount)+"/SVp.txt", "w")
             fdataSVt = open(self.casename+"/"+str(self.runCount)+"/SVpt.txt", "w")
             fdata_stress = open( self.casename+"/"+str(self.runCount)+"/stress/_stress_.txt", "w")
-
+            fdataWork = open(self.casename+"/"+str(self.runCount)+"/work.txt", "w")
         p_cav = heart.uflforms.cavitypressure()
         V_cav = heart.uflforms.cavityvol()
         if(fenics.MPI.rank(heart.comm) == 0):
         	logger.info("Cycle number = "+repr(cycle)+ " cell time = "+repr(t)+ " tstep = "+repr(tstep)+" dt = "+repr(heart.dt.dt))
         	print(tstep, p_cav*0.0075 , V_cav, file=fdataPV)
-
         
         #if(fenics.MPI.rank(heart.comm) == 0):
         #    displacementfile << heart.w.sub(0)
@@ -1496,7 +1495,8 @@ class LVclosed:
         	sigma_fiber_LV = heart.activeforms.CalculateFiberStress(sigma = cauchy, e_fiber = heart.f0, Vol = heart.mesh_volume, Mesh = heart.mesh)
         
         	if(fenics.MPI.rank(heart.comm) == 0):
-        		print (fdata_stress, tstep, sigma_fiber_LV, file=fdata_stress ) 
+        		print (fdata_stress, tstep, sigma_fiber_LV, file=fdata_stress )
+        		print(tstep, heart.uflforms.strainEnergy(integrate=True) , file=fdataWork)
         	#Joy changed Till here          
         
         if(fenics.MPI.rank(heart.comm) == 0):
@@ -1522,6 +1522,7 @@ class LVclosed:
         	fdataSV.close()
         	fdataSVt.close()
         	fdata_stress.close() #Joy Changed here	
+        	fdataWork.close()
         ######################################################################################################
         return runParameters
 class fenicsResultWriter:
@@ -1535,16 +1536,21 @@ class fenicsResultWriter:
         self.workFile=None
         self.fiberFile=None
         if "displacement" in outputResultList:
+            os.makedirs(self.savePath+"/deformation",exist_ok=True)
             self.displacementFile = fenics.File(self.savePath+"/deformation/u_disp.pvd")
         if "stress" in outputResultList:
+            os.makedirs(self.savePath+"/stress",exist_ok=True)
             self.stressFile = fenics.File(self.savePath+"/stress/_stress.pvd") #Joy Changed here
         if "strain" in outputResultList:
+            os.makedirs(self.savePath+"/strain",exist_ok=True)
             self.strainFile = []
             for n in ['ff','ss','nn','fs','fn','ns']:
                 self.strainFile.append(fenics.File(self.savePath+"/strain/_strain_"+n+".pvd"))
-        if "work" in outputResultList:
-            self.workFile = fenics.File(self.savePath+"/work/_work.pvd")
+        if "strain_energy_density" in outputResultList:
+            os.makedirs(self.savePath+"/strain_energy_density",exist_ok=True)
+            self.workFile = fenics.File(self.savePath+"/strain_energy_density/_strain_energy_density.pvd")
         if "fiber" in outputResultList:
+            os.makedirs(self.savePath+"/fiber",exist_ok=True)
             self.fiberFile=[]
             for n in ['ff','ss','nn']:
                 self.fiberFile.append(fenics.File(self.savePath+"/fiber/_fiber_"+n+".pvd"))
@@ -1583,7 +1589,7 @@ class fenicsResultWriter:
             if self.workFile is not None:
                 work1=heart.uflforms.strainEnergy()
                 work=fenics.project(work1,fenics.FunctionSpace(heart.mesh, "CG", 1), form_compiler_parameters={"representation":"uflacs"})
-                work.rename("work","work")
+                work.rename("strain_energy_density","strain_energy_density")
                 self.workFile << work
             if self.fiberFile is not None:
                 Fmat1=heart.uflforms.Fmat()
