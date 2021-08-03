@@ -150,7 +150,8 @@ class Forms(object):
 		
 	    QQ = Cff*pow(Eff,2.0) + Css*pow(Ess,2.0)+ Cnn*pow(Enn,2.0)+ Cns*pow(Ens,2.0) + Cfs*pow(Efs,2.0) + Cfn*pow(Efn,2.0) #Original
 	    if integrate:
-		    Wp = (100*(exp(QQ) -  1.0))*dx(self.parameters["mesh"])
+		    Wp = 0.0 
+		    Wp = assemble((100*(exp(QQ) -  1.0))*dx(self.parameters["mesh"]),form_compiler_parameters={"representation":"uflacs"})
 	    else:
 		    Wp = 100*(exp(QQ) -  1.0)
 	    return Wp
