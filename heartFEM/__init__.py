@@ -91,13 +91,13 @@ History:
                                                             -heartParameters v3.3.0
                                                             -lcleeHeart v3.3.0
                                                             -removed outOfplaneDeg and added 'fiberSheetletAngle','fiberSheetletWidth','radialFiberAngle', set fiberlength for meshing as sarcomere length ['lr']
-  Author: w.x.chan@gmail.com         28JUL2021           - v3.4.2
+  Author: w.x.chan@gmail.com         28JUL2021           - v3.4.3
                                                             - added fenicsResultWriter
                                                             -ngspice_py v3.4.0
                                                             -heartParameters v3.3.0
                                                             -lcleeHeart v3.4.2
 '''
-_version='3.4.2'
+_version='3.4.3'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
