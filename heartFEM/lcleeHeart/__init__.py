@@ -41,10 +41,10 @@ History:
   Author: w.x.chan@gmail.com         14JUL2021           - v3.3.0
                                                             -removed outOfplaneDeg and added fiberSheetletAngle,fiberSheetletWidth,radialFiberAngle,fiberLength for meshing
                                                             -added fiberSheetletAngle,fiberSheetletWidth,radialFiberAngle,fiberLength for changeFiberAngles
-  Author: w.x.chan@gmail.com         28JUL2021           - v3.4.0
+  Author: w.x.chan@gmail.com         28JUL2021           - v3.4.2
                                                             - added strainEnergy in ulforms 
 '''
-_version='3.4.0'
+_version='3.4.2'
 
 import sys
 
