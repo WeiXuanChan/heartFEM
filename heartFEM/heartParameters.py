@@ -38,9 +38,12 @@ History:
   Author: w.x.chan@gmail.com         08JUL2021           - v3.1.0
                                                             -added 'outOfplaneAngle'
   Author: w.x.chan@gmail.com         14JUL2021           - v3.3.0
-                                                            -removed outOfplaneDeg and added 'fiberSheetletAngle','fiberSheetletWidth','radialFiberAngle'
+                                                            -removed outOfplaneDeg and added 'fiberSheetletAngle','fiberSheetletWidth','radialFiberAngle''Windkessel_scale_T0_LV'
+  Author: w.x.chan@gmail.com         12Aug2021           - v3.5.0
+                                                            -added 'Windkessel_scale_T0_LV'
+                                                            -added Aortic_stenosis to multiple resistances from LV to AO
 '''
-_version='3.3.0'
+_version='3.5.0'
 import logging
 logger = logging.getLogger(__name__)
 
@@ -214,6 +217,8 @@ class heartParameters(dict):
             self['V_art'] = 18.5#74*2.5;#440 #this is value for volume of arteries mL
             self['V_LA'] = 0.3#1.2*20; #this is value for volume of left atrium mL
         elif modelString[:5]=='fetal':
+            self['Windkessel_scale_T0_LV']=1.
+            self['Aortic_stenosis']=1.
             
             self['aac'] =0.05
             self['ao1c'] =0.08

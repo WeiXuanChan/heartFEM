@@ -91,13 +91,28 @@ History:
                                                             -heartParameters v3.3.0
                                                             -lcleeHeart v3.3.0
                                                             -removed outOfplaneDeg and added 'fiberSheetletAngle','fiberSheetletWidth','radialFiberAngle', set fiberlength for meshing as sarcomere length ['lr']
-  Author: w.x.chan@gmail.com         28JUL2021           - v3.4.3
+  Author: w.x.chan@gmail.com         28JUL2021           - v3.4.2
                                                             - added fenicsResultWriter
                                                             -ngspice_py v3.4.0
                                                             -heartParameters v3.3.0
                                                             -lcleeHeart v3.4.2
+  Author: w.x.chan@gmail.com         12Aug2021           - v3.5.0
+                                                            - added functions: optimiseFiberAngle
+                                                            -debug cost_function to read _PV.txt if fail for other files
+                                                            -debug optimiser_linker to +1 when runSimulation.runCount is str
+                                                            -debug optimiser_linker to print status and cost in runParameters.txt
+                                                            -debug setRVcurrentInflowFourier phase to be in degrees to match ngspice
+                                                            -added set_kwargs for optimiser_linker
+                                                            - debug consolidated stress output to be in main folder
+                                                            - added costs: 'StrokeVolume' and 'MAXLVLApressure'
+                                                            - added 'Windkessel_scale_T0_LV' to sclae LVbehavior during table generation for ngspice
+                                                            -added 'Aortic_stenosis' to multiple resistances from LV to AO
+                                                            - change setRVcurrentFourier to setRVcurrentInflowFourier to prevent ambiguity
+                                                            -ngspice_py v3.5.0
+                                                            -heartParameters v3.5.0
+                                                            -lcleeHeart v3.4.2
 '''
-_version='3.4.3'
+_version='3.5.0'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
@@ -113,12 +128,13 @@ except:
 import numpy as np
 from scipy import interpolate as scipyinterpolate
 from scipy.optimize import curve_fit
+from scipy import optimize
 from matplotlib import pylab as plt
 from petsc4py import PETSc
 
 import math
 import csv
-
+import re
 import vtk
 from heartFEM import ngspice_py
 from heartFEM import heartParameters
@@ -207,12 +223,22 @@ class LVclosed:
             data=np.loadtxt(self.manualVolFile,skiprows=1)
         timedata=data[:,self.manualVolFiletimecol]*self.manualVolFiletimescale
         voldata=data[:,self.manualVolFilevolcol]*self.manualVolFilevolscale
-        while time>timedata[-1]:
-            time-=self.defaultParameters['BCL']
-        if time<timedata[0]:
-            raise Exception('time '+str(time)+' , is not inside file given:'+self.manualVolFile)
+        if isinstance(time,(int,float)):
+            singleValued=True
+            time=np.array([time])
+        else:
+            singleValued=False
+            time=time.copy()
+        for n in range(len(time)):
+            while time[n]>timedata[-1]:
+                time[n]-=self.defaultParameters['BCL']
+            while time[n]<timedata[0]:
+                time[n]+=self.defaultParameters['BCL']
         spl=scipyinterpolate.splrep(timedata, voldata)
-        return scipyinterpolate.splev(np.array([time]), spl)[0]
+        if singleValued:
+            return scipyinterpolate.splev(time, spl)[0]
+        else:
+            return scipyinterpolate.splev(time, spl)
     def setManualVolumeFile(self,volfile,timecol=0,timescale=1.,volcol=1,volscale=1.):
         self.manualVolFile=volfile
         self.manualVolFiletimecol=timecol
@@ -245,7 +271,7 @@ class LVclosed:
         self.defaultParameters.setDefaultWindkessel(modelString)
         if modelString[:5]=='fetal':
             try:
-                self.setRVcurrentFourier(self.casename+'/'+self.meshname+'_rvflowrate.txt')
+                self.setRVcurrentInflowFourier(self.casename+'/'+self.meshname+'_rvflowrate.txt')
             except Exception as e:
                 logger.warning(e)
                 logger.warning('RV fourier not loaded '+self.casename+'/'+self.meshname+'_rvflowrate.txt')
@@ -259,7 +285,8 @@ class LVclosed:
             self.defaultParameters['raamp']=amp
             self.defaultParameters['rapeaktime']=peaktime
             self.defaultParameters['rawidth']=width
-    def setRVcurrentFourier(self,filename,fourierTerms=1):
+    def setRVcurrentInflowFourier(self,filename,fourierTerms=1):
+        #outflow from RV
         fourierTerms=int(fourierTerms)
         data=np.loadtxt(filename)
         period=2.*data[-1,0]-data[-2,0]
@@ -280,6 +307,7 @@ class LVclosed:
                     popt_temp+=2.*np.pi
                 while popt_temp>np.pi:
                     popt_temp-=2.*np.pi
+                popt_temp*=180./np.pi
             self.defaultParameters['rvfuncarg'+str(n)]=popt_temp
         
     def scaleWinkessel(self,scaleDict,compstr=''):
@@ -343,7 +371,7 @@ class LVclosed:
             return lcleeHeart.generateMesh(self.casename,self.meshname,Laxis,endo_angle=endo_angle,epi_angle=epi_angle,fiberSheetletAngle=fiberSheetletAngle,fiberSheetletWidth=fiberSheetletWidth,radialFiberAngle=radialFiberAngle,fiberLength=fiberLength,clipratio=clipratio,meshsize=meshsize,meshname=self.meshname+saveaddstr,saveSubFolder=toRunCountFolder)
         else:
             return lcleeHeart.generateMesh(self.casename,self.meshname,Laxis,endo_angle=endo_angle,epi_angle=epi_angle,fiberSheetletAngle=fiberSheetletAngle,fiberSheetletWidth=fiberSheetletWidth,radialFiberAngle=radialFiberAngle,fiberLength=fiberLength,clipratio=clipratio,meshsize=meshsize,meshname=self.meshname+saveaddstr)
-    def runWinkessel(self,comm,tstep,dt_dt,*args):
+    def runWindkessel(self,comm,tstep,dt_dt,*args):
         if self.LVage=='adult':
             #args=(p_cav,V_cav,V_art,V_ven,V_LA)
         	p_cav,V_cav,V_art,V_ven,V_LA=args
@@ -1061,6 +1089,102 @@ class LVclosed:
         self.savehdf5(heart,casename,meshname,savename,saveFolder=toRunCountFolder)
         lcleeHeart.changeFiberAngles(casename,savename,runParameters['endo_angle'],runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],saveSubFolder=toRunCountFolder,loadSubFolder=toRunCountFolder)
         return heart
+    def getUnloadedGeometry(self,editParameters=None,casename=None,meshname=None,targetPressure=None,targetVolume=None,tryPressureRatio=0.2,targetMeshCoords=None,savename=None,iterationNumber=0,toRunCountFolder=False,inverseHeart=True):
+        #when targetMeshCoords is not None, set target pressure as the maximum pressure to try
+        #= mesh.coordinates()[:] at target volume
+        runParameters=self.defaultParameters.copy()
+        if editParameters is not None:
+            for key in runParameters:
+                if key in editParameters:
+                    runParameters[key]=editParameters[key]
+        else:
+            editParameters={}
+        if toRunCountFolder:
+            if isinstance(toRunCountFolder,str):
+                if toRunCountFolder[0]!='/':
+                    toRunCountFolder="/"+toRunCountFolder
+            else:
+                toRunCountFolder="/"+str(self.runCount)
+        else:
+            toRunCountFolder=''
+        if casename is None:
+            casename=self.casename
+        if meshname is None:
+            meshname=self.meshname
+        if targetPressure is None:
+            targetPressure=runParameters['EDP_LV']
+        if targetVolume is None:
+            targetVolume=runParameters['EDV_LV']
+        if targetMeshCoords is not None:
+            heart=lcleeHeart.heart(casename,meshname,runParameters)
+            self.solveVolume(heart,targetVolume,voladj=0.05)
+            fenics.ALE.move(heart.mesh,heart.w.sub(0))
+            meshRMS_error=np.array([pointsMeansqDiff_kabsch(heart.mesh.coordinates()[:],targetMeshCoords),float('inf')])
+            #meshRMS_error=np.array([pointsMeansqDiff_kabsch(heart.mesh.coordinates()[:],targetMeshCoords)*0.5,float('inf')])
+            meshRMS_pressurebound=np.array([0,targetPressure])
+            tryPressure=targetPressure
+            adjtryPressure=targetPressure
+        else:
+            tryPressure=tryPressureRatio*targetPressure
+            adjtryPressure=min(tryPressureRatio*0.33,(1-tryPressureRatio)*0.33,0.1)
+        if inverseHeart:
+            heart=self.adjustMeshToPressureWithInverse(casename,meshname,tryPressure,savename=savename,iterationNumber=iterationNumber,saveFolder=toRunCountFolder)
+        else:
+            heart=self.adjustMeshToPressure(casename,meshname,tryPressure,savename=savename,usePrevious=0,iterationNumber=iterationNumber,saveFolder=toRunCountFolder)
+        self.savehdf5(heart,casename,meshname,'tempadjmesh_'+meshname,saveFolder=toRunCountFolder)
+        lcleeHeart.changeFiberAngles(casename,'tempadjmesh_'+meshname,runParameters['endo_angle'],runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],saveSubFolder=toRunCountFolder,loadSubFolder=toRunCountFolder)
+        
+        heart=lcleeHeart.heart(casename+toRunCountFolder,'tempadjmesh_'+meshname,runParameters)
+        self.solveVolume(heart,targetVolume,voladj=0.05)
+        
+        
+            
+        if heart.uflforms.cavitypressure()*0.0075<targetPressure:
+            tunePressure=1
+        else:
+            tunePressure=-1
+        while abs(heart.uflforms.cavitypressure()*0.0075/targetPressure-1)>10**-4.:
+            if targetMeshCoords is not None:
+                fenics.ALE.move(heart.mesh,heart.w.sub(0))
+                temperror=pointsMeansqDiff_kabsch(heart.mesh.coordinates()[:],targetMeshCoords)
+                #temperror=pointsMeansqDiff_kabsch(heart.mesh.coordinates()[:],targetMeshCoords)*0.5
+                #heart=lcleeHeart.heart(casename,'tempadjmesh_'+meshname,runParameters)
+                #self.solveVolume(heart,initialVolume,voladj=0.05)
+                #fenics.ALE.move(heart.mesh,heart.w.sub(0))
+                #temperror+=pointsMeansqDiff_kabsch(heart.mesh.coordinates()[:],initialMeshCoordinates)*0.5
+                replaceInd=np.argmax(meshRMS_error)
+                meshRMS_error[replaceInd]=temperror
+                meshRMS_pressurebound[replaceInd]=tryPressure
+                replaceInd=np.argmax(meshRMS_error)
+                tryPressure=meshRMS_pressurebound[replaceInd]*2./3.+meshRMS_pressurebound[1-replaceInd]/3.
+                adjtryPressure=meshRMS_pressurebound[1]-meshRMS_pressurebound[0]
+            else:
+                tryPressureRatio=tryPressureRatio+tunePressure*adjtryPressure
+                tryPressure=tryPressureRatio*targetPressure
+                logging.info('Trying Pressure '+repr(tryPressure))
+            if inverseHeart:
+                heart=self.adjustMeshToPressureWithInverse(casename,meshname,tryPressure,savename=savename,iterationNumber=iterationNumber,saveFolder=toRunCountFolder)
+            else:
+                heart=self.adjustMeshToPressure(casename,meshname,tryPressure,savename=savename,usePrevious=0,iterationNumber=iterationNumber,saveFolder=toRunCountFolder,tolerance=10.**-3)
+            self.savehdf5(heart,casename,meshname,'tempadjmesh_'+meshname,saveFolder=toRunCountFolder)
+            lcleeHeart.changeFiberAngles(casename,'tempadjmesh_'+meshname,runParameters['endo_angle'],runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],saveSubFolder=toRunCountFolder,loadSubFolder=toRunCountFolder)
+            heart=lcleeHeart.heart(casename+toRunCountFolder,'tempadjmesh_'+meshname,runParameters)
+            self.solveVolume(heart,targetVolume,voladj=0.05)
+            if targetMeshCoords is not None:
+                logging.info('Trying Pressure '+repr(tryPressure)+' between '+repr(meshRMS_pressurebound))
+                logging.info('Errors '+repr(meshRMS_error))
+            elif (tunePressure*heart.uflforms.cavitypressure()*0.0075)>(tunePressure*targetPressure):
+                tunePressure*=-1
+                adjtryPressure*=0.33
+            elif tunePressure==-1 and (tryPressureRatio<1.5*adjtryPressure):
+                adjtryPressure*=0.33
+            if tryPressure<10.**-4. and tunePressure==-1:
+                break
+            if adjtryPressure<10**-3:
+                break
+        self.savehdf5(heart,casename,meshname,savename,saveFolder=toRunCountFolder)
+        lcleeHeart.changeFiberAngles(casename,savename,runParameters['endo_angle'],runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],saveSubFolder=toRunCountFolder,loadSubFolder=toRunCountFolder)
+        return heart
     def writeRunParameters(self,folder,runParameters):
         os.makedirs(folder,exist_ok=True)
         with open(folder+"/runParameters.txt", "w") as f:
@@ -1094,9 +1218,26 @@ class LVclosed:
         with open(folder+"/runParameters.txt", "r") as f:
             lines=f.readlines()
         for line in lines:
+            if line[0]=='#':
+                continue
             temp=line.split(sep=' , ')
             runParameters[temp[0]]=self.decodeStringValue(temp[1])
         return runParameters
+    def getLastcycleCircuitResults(self,BCL):
+        cir_results=np.loadtxt(self.casename+"/"+str(self.runCount)+'/'+'circuit_results.txt',skiprows=1)
+        with open(self.casename+"/"+str(self.runCount)+'/'+'circuit_results.txt','r') as f:
+            cir_results_header=f.readline()
+        if cir_results_header[-1]=='\n':
+            cir_results_header=cir_results_header[:-1]
+        cir_results_header=cir_results_header[1:]
+        for n in range(0,cir_results.shape[1],2):
+            cir_results[:,n]*=1000. #set to ms
+        while cir_results[-1,0]>=(2.*BCL):
+            cir_results[:,0]-=BCL
+        cir_results=cir_results[cir_results[:,0]>=0]
+        cir_results=cir_results[cir_results[:,0]<BCL]
+        np.savetxt(self.casename+"/"+str(self.runCount)+'/'+'circuit_results_lastcycle.txt',cir_results,header=cir_results_header,comments='#')
+        return
     def __call__(self,editParameters=None,**kwargs):
         if self.defaultRun_kwargs is None:
             run_kwargs={}
@@ -1112,6 +1253,8 @@ class LVclosed:
             runParameters=self.unloadedGeometryRun(editParameters=editParameters,**run_kwargs)
         elif self.defaultRunMode=='fullWindkesselRun':
             runParameters=self.fullWindkesselRun(editParameters=editParameters,**run_kwargs)
+        elif self.defaultRunMode=='flowrateWindkesselRun':
+            runParameters=self.flowrateWindkesselRun(editParameters=editParameters,**run_kwargs)
         return runParameters
     def getEDPVR(self,editParameters=None,meshname=None,meshFolder=None,volstep=50,extendVol=0.1,minESV=None,maxEDV=None,saveaddstr='',voladj=0.1,toRunCountFolder=False):
         runParameters=self.defaultParameters.copy()
@@ -1173,7 +1316,8 @@ class LVclosed:
         if min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
             self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],clipratio=runParameters['clip_ratio'],toRunCountFolder=True)
         elif not(os.path.isfile(self.casename+'/'+self.meshname+'.hdf5')):
-            self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],clipratio=runParameters['clip_ratio'],toRunCountFolder=False)
+            if not((folderToLVbehavior is not None and min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])>0) and os.path.isfile(self.casename+folderToLVbehavior+'/'+self.meshname+'_unloadedmesh.hdf5')):
+                self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],clipratio=runParameters['clip_ratio'],toRunCountFolder=False)
         if unloadGeo:
             meshname=self.meshname+'_unloadedmesh'
         else:
@@ -1211,9 +1355,9 @@ class LVclosed:
             else:
                 self.getLVbehavior(runParameters=runParameters,meshname=meshname,volstep=volstep,toRunCountFolder=folderToLVbehavior)
         if folderToLVbehavior is None:
-            ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],timetopeak=runParameters['t0'],loading_casename=self.casename+"/"+str(self.runCount)+'/'+meshname)
+            ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],timetopeak=runParameters['t0'],loading_casename=self.casename+"/"+str(self.runCount)+'/'+meshname,scale_T0_LV=runParameters['Windkessel_scale_T0_LV'])
         else:
-            ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],timetopeak=runParameters['t0'],loading_casename=self.casename+folderToLVbehavior+'/'+meshname)
+            ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],timetopeak=runParameters['t0'],loading_casename=self.casename+folderToLVbehavior+'/'+meshname,scale_T0_LV=runParameters['Windkessel_scale_T0_LV'])
         cmd = "cp "+self.casename+'/'+self.meshname+'_rvflowrate.txt'+" " + self.casename+"/"+str(self.runCount)+'/'+meshname+'_rvflowrate.txt'
         os.system(cmd)
         
@@ -1222,18 +1366,31 @@ class LVclosed:
         else:
             ngspice_py.createLVcircuit(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters,skipVariableList=["timetopeaktension"])
         ngspice_py.simLVcircuit_align_EDvol_and_EStime(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL']*10,self.casename+"/"+str(self.runCount)+'/'+meshname+'_lvcirtable.txt',runParameters['BCL'],runParameters['ES_time'],runParameters['t0'],lvinputvar='table2dtrackrelaxphase',initLVvol=runParameters['EDV_LV'],vla0=runParameters['vla0'],vra0=runParameters['vra0'])
-        cir_results=np.loadtxt(self.casename+"/"+str(self.runCount)+'/'+'circuit_results.txt',skiprows=1)
-        with open(self.casename+"/"+str(self.runCount)+'/'+'circuit_results.txt','r') as f:
-            cir_results_header=f.readline()
-        if cir_results_header[-1]=='\n':
-            cir_results_header=cir_results_header[:-1]
-        for n in range(0,cir_results.shape[1],2):
-            cir_results[:,n]*=1000. #set to ms
-        while cir_results[-1,0]>=(2.*runParameters['BCL']):
-            cir_results[:,0]-=runParameters['BCL']
-        cir_results=cir_results[cir_results[:,0]>=0]
-        cir_results=cir_results[cir_results[:,0]<runParameters['BCL']]
-        np.savetxt(self.casename+"/"+str(self.runCount)+'/'+'circuit_results_lastcycle.txt',cir_results,header=cir_results_header)
+        self.getLastcycleCircuitResults(runParameters['BCL'])
+        return runParameters
+    def flowrateWindkesselRun(self,editParameters=None,lvufile=None,lvinputvar=None):
+        #if using displacement to get unloaded geometry, set unloadGeo='displacement'
+        runParameters=self.defaultParameters.copy()
+        if editParameters is not None:
+            for key in runParameters:
+                if key in editParameters:
+                    runParameters[key]=editParameters[key]
+        else:
+            editParameters={}
+        self.writeRunParameters(self.casename+"/"+str(self.runCount),runParameters)
+        if lvufile is None:
+            lvufile=self.casename+"/"+str(self.runCount)+'/'+self.meshname+'_lvu_outflowrate.txt'
+            lvinputvar='I'
+        if not(os.path.isfile(lvufile)):
+            lvinputvar='I'
+            ref_time=np.arange(-1,self.defaultParameters['BCL']*10.1+1)
+            ref_volume=self.manualVol(ref_time)
+            ref_outflowrate=(ref_volume[2:]-ref_volume[:-2])/2.*1000.
+            tempdata=np.array([ref_time[1:-1]/1000.,ref_outflowrate]).T
+            np.savetxt(lvufile,tempdata)
+        ngspice_py.createLVcircuit(self.casename+"/"+str(self.runCount)+'/'+self.meshname,runParameters)
+        ngspice_py.simLVcircuit(self.casename+"/"+str(self.runCount)+'/'+self.meshname,runParameters['BCL']*10,lvufile,lvinputvar=lvinputvar,initLVvol=runParameters['EDV_LV'],vla0=runParameters['vla0'],vra0=runParameters['vra0'])
+        self.getLastcycleCircuitResults(runParameters['BCL'])
         return runParameters
     def fullWindkesselRun(self,editParameters=None,unloadGeo=True,folderToLVbehavior=None):
         #if using displacement to get unloaded geometry, set unloadGeo='displacement'
@@ -1261,9 +1418,9 @@ class LVclosed:
         volstep=volstep_esv*0.9*(runParameters['EDV_LV']/volstep_esv*1.1/0.9)**(np.linspace(0,1,num=50))[::-1]
         volstep=np.concatenate((volstep[:1]*1.3,volstep[:1]*1.1,volstep,volstep[-1:]*0.9,volstep[-1:]*0.7),axis=0)
         if folderToLVbehavior is None:
-            ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],timetopeak=runParameters['t0'],loading_casename=self.casename+"/"+str(self.runCount)+'/'+meshname)
+            ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],timetopeak=runParameters['t0'],loading_casename=self.casename+"/"+str(self.runCount)+'/'+meshname,scale_T0_LV=runParameters['Windkessel_scale_T0_LV'])
         else:
-            ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],timetopeak=runParameters['t0'],loading_casename=self.casename+folderToLVbehavior+'/'+meshname)
+            ngspice_py.generateLVtable(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL'],timetopeak=runParameters['t0'],loading_casename=self.casename+folderToLVbehavior+'/'+meshname,scale_T0_LV=runParameters['Windkessel_scale_T0_LV'])
         cmd = "cp "+self.casename+'/'+self.meshname+'_rvflowrate.txt'+" " + self.casename+"/"+str(self.runCount)+'/'+meshname+'_rvflowrate.txt'
         os.system(cmd)
         
@@ -1272,20 +1429,9 @@ class LVclosed:
         else:
             ngspice_py.createLVcircuit(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters,skipVariableList=["timetopeaktension"])
         ngspice_py.simLVcircuit_align_EDvol_and_EStime(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL']*10,self.casename+"/"+str(self.runCount)+'/'+meshname+'_lvcirtable.txt',runParameters['BCL'],runParameters['ES_time'],runParameters['t0'],lvinputvar='table2dtrackrelaxphase',initLVvol=runParameters['EDV_LV'],vla0=runParameters['vla0'],vra0=runParameters['vra0'])
-        cir_results=np.loadtxt(self.casename+"/"+str(self.runCount)+'/'+'circuit_results.txt',skiprows=1)
-        with open(self.casename+"/"+str(self.runCount)+'/'+'circuit_results.txt','r') as f:
-            cir_results_header=f.readline()
-        if cir_results_header[-1]=='\n':
-            cir_results_header=cir_results_header[:-1]
-        for n in range(0,cir_results.shape[1],2):
-            cir_results[:,n]*=1000. #set to ms
-        while cir_results[-1,0]>=(2.*runParameters['BCL']):
-            cir_results[:,0]-=runParameters['BCL']
-        cir_results=cir_results[cir_results[:,0]>=0]
-        cir_results=cir_results[cir_results[:,0]<runParameters['BCL']]
-        np.savetxt(self.casename+"/"+str(self.runCount)+'/'+'circuit_results_lastcycle.txt',cir_results,header=cir_results_header)
+        self.getLastcycleCircuitResults(runParameters['BCL'])
         return runParameters
-    def iterativeRun(self,editParameters=None,runTimeList=None,endTime=None,manualPhaseTimeInput=False,setHeart=None,outputResultList=None):
+    def iterativeRun(self,editParameters=None,runTimeList=None,endTime=None,manualPhaseTimeInput=False,unloadGeo=False,setHeart=None,outputResultList=None,tryPressureRatio=0.2):
         '''
         setHeart: list or lcleeHeart object: list [folder name, meshname]
         '''
@@ -1353,10 +1499,10 @@ class LVclosed:
                 heart=lcleeHeart.heart(self.casename,self.meshname,runParameters)
         else:
             if min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
-        	    self.getUnloadedGeometry(editParameters=runParameters,casename=self.casename+'/'+str(self.runCount),targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],savename=self.meshname+'_unloadedmesh')
+        	    self.getUnloadedGeometry(editParameters=runParameters,casename=self.casename+'/'+str(self.runCount),targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],savename=self.meshname+'_unloadedmesh',tryPressureRatio=tryPressureRatio)
         	    heart=lcleeHeart.heart(self.casename+'/'+str(self.runCount),self.meshname+'_unloadedmesh',runParameters)
             else:
-        	    self.getUnloadedGeometry(editParameters=runParameters,savename=self.meshname+'_unloadedmesh',targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],toRunCountFolder=True)
+        	    self.getUnloadedGeometry(editParameters=runParameters,savename=self.meshname+'_unloadedmesh',targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],toRunCountFolder=True,tryPressureRatio=tryPressureRatio)
         	    heart=lcleeHeart.heart(self.casename,self.meshname+'_unloadedmesh',runParameters)
         heart.dt.dt = 1.
         if manualPhaseTimeInput and self.manualPhaseTime is not None:
@@ -1370,14 +1516,13 @@ class LVclosed:
         #Joy Changed from here
         #Stress calculation 
         
-
         ###stress_File << cauchy ## wei xuan remove
         if(fenics.MPI.rank(heart.comm) == 0): #added to output the volume, stroke volume data before the while loop
             fdataPV = open(self.casename+"/"+str(self.runCount)+"/PV_.txt", "w")
             fdatals = open(self.casename+"/"+str(self.runCount)+"/ls.txt", "w")
             fdataSV = open(self.casename+"/"+str(self.runCount)+"/SVp.txt", "w")
             fdataSVt = open(self.casename+"/"+str(self.runCount)+"/SVpt.txt", "w")
-            fdata_stress = open( self.casename+"/"+str(self.runCount)+"/stress/_stress_.txt", "w")
+            fdata_stress = open( self.casename+"/"+str(self.runCount)+"/_stress_.txt", "w")
             fdataWork = open(self.casename+"/"+str(self.runCount)+"/work.txt", "w")
         p_cav = heart.uflforms.cavitypressure()
         V_cav = heart.uflforms.cavityvol()
@@ -1439,9 +1584,9 @@ class LVclosed:
         	if self.manualVol is not None:
         		V_cav=self.manualVol(tstep)
         	elif self.LVage=='adult':
-        		V_cav,V_art,V_ven,V_LA=self.runWinkessel(heart.comm,tstep,dt,p_cav,V_cav,V_art,V_ven,V_LA)
+        		V_cav,V_art,V_ven,V_LA=self.runWindkessel(heart.comm,tstep,dt,p_cav,V_cav,V_art,V_ven,V_LA)
         	else:
-        		V_cav=self.runWinkessel(heart.comm,tstep,dt)
+        		V_cav=self.runWindkessel(heart.comm,tstep,dt)
 
             
         	t_array.append(t)
@@ -1605,6 +1750,140 @@ class fenicsResultWriter:
                 fiber_nn = fenics.project(Fmat1*n0,fenics.VectorFunctionSpace(heart.mesh, "CG", 1), form_compiler_parameters={"representation":"uflacs"})
                 fiber_nn.rename("fiber_nn","fiber_nn")
                 self.fiberFile[2] << fiber_nn
+class tanh_limit:
+    def __init__(self,low,high,inverse=False,log=0):
+        self.log=log
+        if log>0:
+            self.low=np.log(low)/np.log(self.log)
+            self.high=np.log(high)/np.log(self.log)
+        else:
+            self.low=low
+            self.high=high
+        self.inverse=inverse
+    def __call__(self,y,inverse=None):
+        if inverse is None:
+            inverse=self.inverse
+        if inverse:
+            if self.log>0:
+                x=np.log(y)/np.log(self.log)
+            else:
+                x=y
+            if self.low==float('-inf') and self.high==float('inf'):
+                return x
+            elif self.high==float('inf'):
+                return np.log(x-self.low)
+            elif self.low==float('-inf'):
+                return -np.log(self.high-x)
+            else:
+                if x<=self.low:
+                    return float('-inf')
+                elif x>=self.high:
+                    return float('inf')
+                else:
+                    #return np.arctanh(min(1.,max(-1.,(x-self.low)*2./(self.high-self.low)-1.)))*(self.high-self.low)**2.
+                    return -np.log((self.high-self.low)/(x-self.low)-1.)*(self.high-self.low)**2.
+        else:
+            if self.low==float('-inf') and self.high==float('inf'):
+                result=y
+            elif self.high==float('inf'):
+                result=np.exp(y)+self.low
+            elif self.low==float('-inf'):
+                result=-np.exp(-y)+self.high
+            else:
+                #return (np.tanh(x/(self.high-self.low)**2.)+1.)/2.*(self.high-self.low)+self.low
+                result=(self.high-self.low)/(1+np.exp(-y/(self.high-self.low)**2.))+self.low
+            if self.log>0:
+                return self.log**result
+            else:
+                return result
+def plotLVBehavior(mainPath,labelList=None,timeSlice=None,volumeSlice=None,fmt='png',show=False):
+    if not(isinstance(mainPath,list)):
+        mainPath=[mainPath]
+    removeVolumeratio=0.1
+    VolTime_total=[]
+    timeSpace=[]
+    volumeSpace=[]
+    for n in range(len(mainPath)):
+        timeSpace.append(np.loadtxt(mainPath[n]+'_Press_timeSpace.txt'))
+        volumeSpace.append(np.loadtxt(mainPath[n]+'_Press_volumeSpace.txt'))
+        VolTime_base=np.loadtxt(mainPath[n]+'_Press_VolTime_base.txt')
+        VolTime=np.loadtxt(mainPath[n]+'_Press_VolTime.txt')
+        
+        remove_volumeSpace=int(len(volumeSpace)*removeVolumeratio)
+        remove_timeSpace=int(len(timeSpace)*0.5)
+        volumeSpace[-1]=volumeSpace[-1][remove_volumeSpace:-remove_volumeSpace]
+        VolTime_base=VolTime_base[remove_volumeSpace:-remove_volumeSpace]
+        VolTime=VolTime[remove_volumeSpace:-remove_volumeSpace]
+        timeSpace[-1]=timeSpace[-1][:-remove_timeSpace]
+        VolTime=VolTime[:,:-remove_timeSpace]
+        
+        VolTime_total.append(VolTime_base.reshape((-1,1))+VolTime)
+    import matplotlib.pyplot as plt
+    from matplotlib import cm
+    import matplotlib.ticker as mticker
+    import matplotlib.colors as colors
+    cList=['k','b','r','g','c','m','y']
+    if timeSlice is not None:
+        fig,ax=plt.subplots(1,1)
+        for m in range(len(mainPath)):
+            data=[]
+            for n in range(len(volumeSpace[m])):
+                spl=scipyinterpolate.splrep(timeSpace[m], VolTime_total[m][n,:])
+                data.append(scipyinterpolate.splev(np.array([timeSlice]), spl)[0])
+            if labelList is not None:
+                label=labelList[m]
+            plt.plot(volumeSpace[m],data,color=cList[m],label=label)
+        ax.set_title('LV Behavior at {0:.1f}ms'.format(timeSlice))
+        ax.set_xlabel('Volume (mL)')
+        ax.set_ylabel('Pressure (mmHg)')
+        if len(mainPath)>1:
+            ax.legend(loc=0)
+        plt.savefig(mainPath[0]+'_LVBehaviorPlot_time_{0:.1f}ms.png'.format(timeSlice),dpi=fig.dpi,format=fmt,bbox_inches='tight')
+        fig.clf()
+    if volumeSlice is not None:
+        fig,ax=plt.subplots(1,1)
+        for m in range(len(mainPath)):
+            data=[]
+            for n in range(len(timeSpace[m])):
+                spl=scipyinterpolate.splrep(volumeSpace[m][::-1], VolTime_total[m][::-1,n])
+                data.append(scipyinterpolate.splev(np.array([volumeSlice]), spl)[0])
+            if labelList is not None:
+                label=labelList[m]
+            plt.plot(volumeSpace[m][::-1],data,color=cList[m],label=label)
+        ax.set_title('LV Behavior at {0:.1f}mL'.format(volumeSlice))
+        ax.set_xlabel('Time (ms)')
+        ax.set_ylabel('Pressure (mmHg)')
+        if len(mainPath)>1:
+            ax.legend(loc=0)
+        plt.savefig(mainPath[0]+'_LVBehaviorPlot_volume_{0:.1f}mL.png'.format(volumeSlice),dpi=fig.dpi,format=fmt,bbox_inches='tight')
+        fig.clf()
+    
+    fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+    X, Y = np.meshgrid(timeSpace, volumeSpace)
+    
+    # Customize the z axis.
+    vmax=VolTime_total.max()
+    vmin=VolTime_total.min()
+    surf = ax.plot_surface(X, Y, VolTime_total,cmap=cm.coolwarm,linewidth=0, antialiased=False)
+
+    ax.zaxis.set_major_locator(mticker.LinearLocator(10))
+    ax.zaxis.set_major_formatter('{x:.01f}')
+    ax.set_zlim(vmin,vmax)
+        
+    
+    # Add a color bar which maps values to colors.
+    fig.colorbar(surf, shrink=0.5, aspect=5)
+    ax.set_title('LV Behavior - Pressure (mmHg)')
+    ax.set_xlabel('Time (ms)')
+    ax.set_ylabel('Volume (mL)')
+    ax.set_zlabel('Pressure (mmHg)')
+    plt.savefig(mainPath[0]+'_LVBehaviorPlot.png',dpi=fig.dpi,format=fmt,bbox_inches='tight')
+    if show:
+        plt.show()
+    fig.clf()
+
+def exactFunc(x,inverse=None):
+    return x
 class optimiser_linker:
     def __new__(cls, *args, **kwargs):
         return super().__new__(cls)
@@ -1612,41 +1891,127 @@ class optimiser_linker:
         self.runSimulation=runSimulationClass
         self.calculateCost=calculateCostClass
         self.variableList=[]
+        self.variableOperatorList=[]
         self.minCost=float('inf')
-    def addVariable(self,variables):
+        self.kwargs={}
+    def addVariable(self,variables,variableOperator=None,log=0):
         if isinstance(variables,str):
             variables=[variables]
+        if variableOperator is None:
+            variableOperator=[exactFunc]*len(variables)
+        elif not(isinstance(variableOperator,(list,tuple))):
+            variableOperator=[variableOperator]*len(variables)
+        elif isinstance(variableOperator[0],(float,int)):
+                variableOperator=[variableOperator]*len(variables)
+        if not(isinstance(log,(list,tuple))):
+            logList=[log]*len(variables)
+        else:
+            logList=log
         self.variableList+=variables
+        for n in range(len(variables)):
+            if variableOperator[n] is None:
+                self.variableOperatorList+=[exactFunc]
+            if isinstance(variableOperator[n],(list,tuple)):
+                self.variableOperatorList+=[tanh_limit(variableOperator[n][0],variableOperator[n][1],log=logList[n])]
+            else:
+                self.variableOperatorList+=[variableOperator[n]]
+    def invOperate_para(self,para):
+        result=[]
+        for n in range(len(para)):
+            result.append(self.variableOperatorList[n](para[n],inverse=True))
+        return np.array(result)
+    def set_kwargs(self,**kwargs):
+        if len(kwargs)>0:
+            self.kwargs=kwargs
     def __call__(self,para):
         if len(self.variableList)==0:
             raise Exception('Select variable to optimise with optimiser.addVariable(VARIABLE_STRING[s])')
-        os.makedirs(self.runSimulation.casename+'/best_fit',exist_ok=True)
+        if isinstance(self.runSimulation.runCount,str):
+            try:
+                removecounter=self.runSimulation.runCount[::-1].index('/')
+                subFolderName=self.runSimulation.runCount[:-removecounter]
+            except:
+                subFolderName=''
+        os.makedirs(self.runSimulation.casename+'/'+subFolderName+'best_fit',exist_ok=True)
         editParameters={}
         for n in range(len(self.variableList)):
-            editParameters[self.variableList[n]]=para[n]
+            editParameters[self.variableList[n]]=self.variableOperatorList[n](para[n])
         try:
-            self.runSimulation.runCount+=1
-            runParameters=self.runSimulation(editParameters=editParameters)  
+            if isinstance(self.runSimulation.runCount,int):
+                self.runSimulation.runCount+=1
+            elif isinstance(self.runSimulation.runCount,str):
+                if re.match('.*?([0-9]+)$', self.runSimulation.runCount)== None:
+                    last_digits = None
+                else:
+                    last_digits = re.match('.*?([0-9]+)$', self.runSimulation.runCount).group(1)
+                if last_digits is None:
+                    self.runSimulation.runCount+='0'
+                else:
+                    self.runSimulation.runCount=self.runSimulation.runCount[:-len(last_digits)]+str(int(last_digits)+1)
+            kwargs=self.kwargs
+            runParameters=self.runSimulation(editParameters=editParameters,**kwargs)  
         except Exception as e_inst:
-            with open(self.runSimulation.casename+'/'+str(self.runSimulation.runCount)+"/runParameters.txt", "r+") as f:
-                 old = f.read() # read everything in the file
-                 f.seek(0) # rewind
-                 f.write("Status , FAILED\n cost , "+str(type(e_inst))+'  '+str(type(e_inst))+"\n" + old) # write the new line before
+            print(repr(e_inst))
+            with open(self.runSimulation.casename+'/'+str(self.runSimulation.runCount)+"/runParameters.txt", "r") as f:
+                 old = f.readlines() # read everything in the file
+            old.insert(0,"#Status , FAILED\n# cost , "+str(type(e_inst))+'  '+str(type(e_inst))+"\n")
+            with open(self.runSimulation.casename+'/'+str(self.runSimulation.runCount)+"/runParameters.txt", "w") as f:
+                 f.writelines(old) # write the new line before
+            logger.warning("FAILED RUN")
             return float('inf')
         else:
-            cost_current=self.calculateCost(self.runSimulation.casename+'/'+str(self.runSimulation.runCount),runParameters)
-            with open(self.runSimulation.casename+'/'+str(self.runSimulation.runCount)+"/runParameters.txt", "r+") as f:
-                 old = f.read() # read everything in the file
-                 f.seek(0) # rewind
-                 f.write("Status , SUCCESS\n cost , "+str(cost_current)+"\n" + old) # write the new line before
+            component_Cost=self.calculateCost(self.runSimulation.casename+'/'+str(self.runSimulation.runCount),runParameters)
+            cost_current=np.sum(component_Cost)
+            addline=''
+            for n in range(len(self.calculateCost.costs)):
+                addline+=' , '+self.calculateCost.costs[n]+'='+str(component_Cost[n])+'/'+str(self.calculateCost.weights[n])
+            with open(self.runSimulation.casename+'/'+str(self.runSimulation.runCount)+"/runParameters.txt", "r") as f:
+                 old = f.readlines() # read everything in the file
+            old.insert(0,"#Status , SUCCESS\n# cost , "+str(cost_current)+addline+"\n")
+            with open(self.runSimulation.casename+'/'+str(self.runSimulation.runCount)+"/runParameters.txt", "w") as f:
+                 f.writelines(old) # write the new line before
+                 
             if cost_current<self.minCost:
                 self.minCost=cost_current
-                cmd = "rm -r " + self.runSimulation.casename+'/best_fit'
+                
+                    
+                cmd = "rm -r " + self.runSimulation.casename+'/'+subFolderName+'best_fit'
                 os.system(cmd)
-                os.makedirs(self.runSimulation.casename+'/best_fit',exist_ok=True)
-                cmd = "cp -r " + self.runSimulation.casename+'/'+str(self.runSimulation.runCount)+'/* '+ self.runSimulation.casename+'/best_fit'
+                os.makedirs(self.runSimulation.casename+'/'+subFolderName+'best_fit',exist_ok=True)
+                cmd = "cp -r " + self.runSimulation.casename+'/'+str(self.runSimulation.runCount)+'/* '+ self.runSimulation.casename+'/'+subFolderName+'best_fit'
                 os.system(cmd)
+            logger.info("cost="+repr(cost_current))
             return cost_current
+def MeanSquare(x,ref):
+    result=(x-ref)**2.
+    if isinstance(result,np.ndarray):
+        result.mean()
+    return result
+def Exact(x,ref):
+    if isinstance(x,np.ndarray):
+        result=x.mean()
+    else:
+        result=x
+    return result
+def getCircuitResult(folder,ngspice_varname,last_cycle=False):
+    filename='/circuit_results'
+    if last_cycle:
+        filename=filename+'_lastcycle'
+    filename=filename+'.txt'
+    with open(folder+filename,'r') as f:
+        header=f.readline()
+    if header[-1]=='\n':
+        header=header[:-1]
+    headerList=header.split()
+    while not('time' in headerList[0]):
+        headerList.pop(0)
+    if last_cycle:
+        result=np.loadtxt(folder+filename)
+    else:
+        result=np.loadtxt(folder+filename,skiprows=1)
+    if result.shape[1]!=len(headerList):
+        logger.warning("Circuit results shape "+repr(result.shape)+' does not match header list with length '+str(len(headerList)))
+    return result[:,headerList.index(ngspice_varname)]
         
 class cost_function:
     def __new__(cls, *args, **kwargs):
@@ -1659,10 +2024,16 @@ class cost_function:
             self.matchingFolder=matchingFolder
         else:
             self.matchingFolder=os.getcwd()+'/'+matchingFolder
-        self.collateNameSwitch={'MeanSquare':self.MeanSquare
+        self.collateNameSwitch={'MeanSquare':MeanSquare,
+                                'Exact':Exact
                             }
         self.varNameSwitch={'LeftVentriclePressure':'p_cav',
                          'LeftVentricleVolume':'V_cav',
+                         'StrokeVolume':'V_sv',
+                         'MaxLVLAPressure':'pmax_LVLA',
+                         'MaxLVAAPressure':'pmax_LVAA',
+                         'IsovolumetricContractionTime':'t_isocontract',
+                         'IsovolumetricRelaxationTime':'t_isorelax',
                          't_la':'t_la', 
                          'VeinPressure':'Pven',
                          'ArterialPressure':'Part', 
@@ -1682,10 +2053,10 @@ class cost_function:
                          'SystolicMeshCoordinates':'coordsSysMesh'                        
                          }
     def __call__(self,folderName,runParameters):
-        f=0.
+        f=[]
         for n in range(len(self.costs)):
             func,var=self.decodeCost(self.costs[n])
-            f+=func(folderName,runParameters,var)*self.weights[n]
+            f.append(self.getCost(folderName,runParameters,var,func)*self.weights[n])
         return f
     def decodeCost(self,costLabel):
         for key in self.collateNameSwitch:
@@ -1702,7 +2073,7 @@ class cost_function:
         if isinstance(costString,str):
             costString=[costString]
         if isinstance(weights,(float,int)):
-            weights=[weights]
+            weights=np.ones(len(costString))*weights
         for n in range(len(costString)):
             self.costs.append(costString[n])
             self.weights.append(weights[n])
@@ -1714,34 +2085,399 @@ class cost_function:
                 temp_ind=self.costs.index(string)
                 self.costs.pop(temp_ind)
                 self.weights.pop(temp_ind)
-    def getspline(self,folderName,varName):
-        if self.runMode=='LVbehaviorRun':
+    def getspline(self,folderName,varName,returnArray=False):
+        if returnArray:
+            def returnFunc(*xx):
+                return np.array(xx).T
+        else:
+            returnFunc=scipyinterpolate.splrep
+        if self.runMode=='LVbehaviorRun' or self.runMode=='fullWindkesselRun' or self.runMode=='flowrateWindkesselRun':
             fdatacl = np.loadtxt(folderName+"/circuit_results.txt",skiprows=1)
-            name=[' ', 'p_cav',' ', 'V_cav',' ', 'PLA',' ','PRV',' ','PRA', ' ','Ppa1',' ','Paa' ]
-            return scipyinterpolate.splrep(fdatacl[:,0]*1000., fdatacl[:,name.index(varName)])
+            name=[' ', 'p_cav',' ', 'V_cav',' ', 'PLA',' ','PRV',' ','PRA', ' ','Ppa1',' ','Paa' ,' ','QLV_in' , ' ','PhaseTime' , ' ','V_RV' , ' ','QLALV' , ' ','QLVAA' , ' ','QLVLA']
+            return returnFunc(fdatacl[:,0]*1000., fdatacl[:,name.index(varName)])
         elif self.runMode=='iterativeRun':
-            fdatacl = np.loadtxt(folderName+"/cl.txt")
-            name=['tstep', 'p_cav', 'V_cav', 't_la', 'Pven', 'PLV', 'Part', 'PLA', 'Qla', 'Qao', 'Qper', 'Qmv', 'V_ven', 'V_cav', 'V_art', 'V_LA']
-            return scipyinterpolate.splrep(fdatacl[:,0], fdatacl[:,name.index(varName)])
+            try:
+                fdatacl = np.loadtxt(folderName+"/circuit_results.txt",skiprows=1)
+                name=[' ', 'p_cav',' ', 'V_cav',' ', 'PLA',' ','PRV',' ','PRA', ' ','Ppa1',' ','Paa' ]
+                return returnFunc(fdatacl[:,0]*1000., fdatacl[:,name.index(varName)])
+            except:
+                try:
+                    fdatacl = np.loadtxt(folderName+"/cl.txt")
+                    name=['tstep', 'p_cav', 'V_cav', 't_la', 'Pven', 'PLV', 'Part', 'PLA', 'Qla', 'Qao', 'Qper', 'Qmv', 'V_ven', 'V_cav', 'V_art', 'V_LA']
+                except:
+                    fdatacl = np.loadtxt(folderName+"/PV_.txt")
+                    name=['tstep', 'p_cav', 'V_cav']
+                return returnFunc(fdatacl[:,0], fdatacl[:,name.index(varName)])
         elif self.runMode=='unloadedGeometry':
             fdatacl = np.loadtxt(folderName+"/"+varName+".txt")
             return fdatacl
-    def MeanSquare(self,folderName,runParameters,varName):
+    def getCost(self,folderName,runParameters,varName,func):
         if varName[:6]=="coords":
-            ref=np.loadtxt(self.matchingFolder+"/"+varName+".txt")
+            try:
+                ref=np.loadtxt(self.matchingFolder+"/"+varName+".txt")
+            except:
+                ref=None
             simulated=self.getspline(folderName,varName)
-            return np.mean((simulated-ref)**2.)*3.
+            return func(simulated,ref)
+        elif varName=='V_sv':
+            try:
+                ref=float(np.loadtxt(self.matchingFolder+"/"+varName+".txt"))
+            except:
+                ref=None
+            valueArray=self.getspline(folderName,'V_cav',returnArray=True)
+            valueArray=valueArray[valueArray[:,0]>=(valueArray[:,0].max()-runParameters['BCL'])]
+            cycletime=valueArray[:,0]%runParameters['BCL']
+            diastolictimeInd=np.argmin(np.minimum(cycletime,runParameters['BCL']-cycletime))
+            minval=np.min(valueArray[:,1])
+            maxval=np.max(valueArray[:,1])
+            ratio=2.*(valueArray[diastolictimeInd,1]-minval)/(maxval-minval)-1
+            return func(ratio*(maxval-minval),ref)
+        elif varName=='pmax_LVLA':  
+            try:
+                ref=float(np.loadtxt(self.matchingFolder+"/"+varName+".txt"))
+            except:
+                ref=None
+            valueArray_p_cav=self.getspline(folderName,'p_cav',returnArray=True)
+            valueArray=valueArray_p_cav.copy()
+            valueArray_PLA=self.getspline(folderName,'PLA',returnArray=True)
+            valueArray[:,1]=valueArray_p_cav[:,1]-valueArray_PLA[:,1]
+            valueArray=valueArray[valueArray_p_cav[:,0]>=(valueArray_p_cav[:,0].max()-runParameters['BCL'])]
+            return func(valueArray[:,1].max(),ref)
+        elif varName=='pmax_LVAA':  
+            try:
+                ref=float(np.loadtxt(self.matchingFolder+"/"+varName+".txt"))
+            except:
+                ref=None
+            valueArray_p_cav=self.getspline(folderName,'p_cav',returnArray=True)
+            valueArray=valueArray_p_cav.copy()
+            valueArray_PAA=self.getspline(folderName,'Paa',returnArray=True)
+            valueArray[:,1]=valueArray_p_cav[:,1]-valueArray_PAA[:,1]
+            valueArray=valueArray[valueArray_p_cav[:,0]>=(valueArray_p_cav[:,0].max()-runParameters['BCL'])]
+            return func(valueArray[:,1].max(),ref)
+        elif varName =='t_isorelax':
+            try:
+                ref=np.loadtxt(self.matchingFolder+"/"+varName+".txt")[0]
+            except:
+                ref=None
+            valueArray=self.getspline(folderName,'V_cav')
+            valueArray=valueArray[valueArray[:,0]>=(valueArray[:,0].max()-runParameters['BCL'])]
+            minVolindmax=np.argmin(valueArray[:,1])
+            minVolindmin=minVolindmax
+            minVol=valueArray[minVolindmax,1]
+            for n in range(minVolindmax+1,valueArray.shape[0]):
+                if valueArray[n,1]<=(minVol*1.01):
+                    minVolindmax+=1
+                else:
+                    break
+            for n in range(minVolindmin-1,-1,-1):
+                if valueArray[n,1]<=(minVol*1.01):
+                    minVolindmin-=1
+                else:
+                    break
+            relaxtime=valueArray[minVolindmax,0]-valueArray[minVolindmin,0]
+            return func(relaxtime,ref)
+        elif varName=='t_isocontract':
+            try:
+                ref=np.loadtxt(self.matchingFolder+"/"+varName+".txt")[0]
+            except:
+                ref=None
+            valueArray=self.getspline(folderName,'V_cav')
+            valueArray=valueArray[valueArray[:,0]>=(valueArray[:,0].max()-runParameters['BCL'])]
+            maxVolindmax=np.argmax(valueArray[:,1])
+            maxVolindmin=maxVolindmax
+            maxVol=valueArray[maxVolindmax,1]
+            for n in range(maxVolindmax+1,valueArray.shape[0]):
+                if valueArray[n,1]<=(maxVol*0.99):
+                    maxVolindmax+=1
+                else:
+                    break
+            for n in range(maxVolindmin-1,-1,-1):
+                if valueArray[n,1]<=(maxVol*0.99):
+                    maxVolindmin-=1
+                else:
+                    break
+            contracttime=valueArray[maxVolindmax,0]-valueArray[maxVolindmin,0]
+            return func(contracttime,ref)
         else:
-            ref=np.loadtxt(self.matchingFolder+"/"+varName+".txt")
+            try:
+                ref=np.loadtxt(self.matchingFolder+"/"+varName+".txt")
+            except:
+                ref=None
             spl=self.getspline(folderName,varName)
-            ref[:,0]=ref[:,0]+runParameters['BCL']*int((spl[0][-6]-ref[0,0])/runParameters['BCL'])
-            ref[:,0][ref[:,0]>spl[0][-7]]-=runParameters['BCL']
             simulated = scipyinterpolate.splev(ref[:,0], spl)
-            return np.mean((simulated-ref[:,1])**2.)
-    def getFunc(self,varName,collateFunction=None):
-        if collateFunction is None:
-            collateFunction=self.MeanSquare
-        def func(folderName,runParameters):
-            return collateFunction(folderName,runParameters,varName)
-        return func
+            return func(simulated,ref[:,1])
+def optimiseEDP(LVclosed_object,maxLALV_pressure,folder=None,try_stlPressure=4.):
+    if folder is None:
+        folder='optimiseEDP'
+    os.makedirs(LVclosed_object.casename+'/'+folder+'/best_fit',exist_ok=True)
+    LVclosed_object.runCount=folder
+    LVclosed_object.generateMesh(Laxis=np.array([LVclosed_object.defaultParameters['Laxis_X'],LVclosed_object.defaultParameters['Laxis_Y'],LVclosed_object.defaultParameters['Laxis_Z']]),endo_angle=LVclosed_object.defaultParameters['endo_angle'],epi_angle=LVclosed_object.defaultParameters['epi_angle'],fiberSheetletAngle=LVclosed_object.defaultParameters['fiberSheetletAngle'],fiberSheetletWidth=LVclosed_object.defaultParameters['fiberSheetletWidth'],radialFiberAngle=LVclosed_object.defaultParameters['radialFiberAngle'],fiberLength=LVclosed_object.defaultParameters['lr'],clipratio=LVclosed_object.defaultParameters['clip_ratio'],toRunCountFolder=True)
+    tune=1.
+    end_start_Diastolic_pressure=0.
+    stlPressure_adj=try_stlPressure*0.3
+    try_stlPressure_current=try_stlPressure*0.7
+    while end_start_Diastolic_pressure*tune<maxLALV_pressure*tune:
+        if abs(end_start_Diastolic_pressure-maxLALV_pressure)<0.001 or stlPressure_adj<0.001:
+            break
+        try_stlPressure_current+=stlPressure_adj*tune
+        LVclosed_object.runCount=folder+'/{0:.3f}'.format(try_stlPressure_current)
+        heart=LVclosed_object.adjustMeshToPressureWithInverse(LVclosed_object.casename+'/'+folder,LVclosed_object.meshname,try_stlPressure_current,savename=LVclosed_object.meshname+'_unloadedmesh',iterationNumber=0,saveFolder='/{0:.3f}'.format(try_stlPressure_current))
+        heart=lcleeHeart.heart(LVclosed_object.casename+'/'+LVclosed_object.runCount,LVclosed_object.meshname+'_unloadedmesh',LVclosed_object.defaultParameters)
+        LVclosed_object.solveVolume(heart,LVclosed_object.defaultParameters['ESV_LV'])
+        temp_ESP=heart.uflforms.cavitypressure()*0.0075
+        LVclosed_object.solveVolume(heart,LVclosed_object.defaultParameters['EDV_LV'])
+        temp_EDP=heart.uflforms.cavitypressure()*0.0075
+        end_start_Diastolic_pressure=temp_EDP-temp_ESP
+        LVclosed_object.defaultParameters['EDP_LV']=temp_EDP
+        LVclosed_object.writeRunParameters(LVclosed_object.casename+'/'+LVclosed_object.runCount,LVclosed_object.defaultParameters)
+        if end_start_Diastolic_pressure*tune>maxLALV_pressure*tune:
+            tune*=-1.
+            stlPressure_adj*=0.3
+    
+    cmd = "cp -r " + LVclosed_object.casename+'/'+folder+'/'+LVclosed_object.meshname+'* '+ LVclosed_object.casename+'/'+folder+'/best_fit'
+    os.system(cmd)
+    cmd = "cp -r " + LVclosed_object.casename+'/'+LVclosed_object.runCount+'/* '+ LVclosed_object.casename+'/'+folder+'/best_fit'
+    os.system(cmd)
+def optimiseFiberAngle(LVclosed_object,optVarList=None,folder=None,tryPressureRatio=0.2):
+    if optVarList is None:
+        optVarList=['endo_angle','epi_angle']
+    if folder is None:
+        folder='optimiseFiberAngle'
+    bound=[]
+    for var in optVarList:
+        if var=='endo_angle':
+            bound.append((0.,90.))
+        elif var=='epi_angle':
+            bound.append((-90.,0))
+        elif var=='fiberSheetletAngle':
+            bound.append((-90.,90.))
+        elif var=='fiberSheetletWidth':
+            bound.append((0.,float('inf')))
+        elif var=='radialFiberAngle':
+            bound.append((-90.,90.))
+        else:
+            bound.append((float('-inf'),float('inf')))
+    LVclosed_object.defaultRunMode='iterativeRun'
+    LVclosed_object.runCount=folder+'/0'
+    os.makedirs(LVclosed_object.casename+'/'+folder+'/ref',exist_ok=True)
+    np.savetxt(LVclosed_object.casename+'/'+folder+'/ref/p_cav.txt',np.array([[0.,LVclosed_object.defaultParameters['EDP_LV']],[LVclosed_object.defaultParameters['t0'],500.]]))
+    cost=cost_function(LVclosed_object.defaultRunMode,matchingFolder=LVclosed_object.casename+'/'+folder+'/ref')
+    cost.addCost('LeftVentriclePressureMeanSquare')
+    linker=optimiser_linker(LVclosed_object,cost)
+    linker.addVariable(optVarList)
+    linker.set_kwargs(endTime=LVclosed_object.defaultParameters['t0']+3,outputResultList=[],tryPressureRatio=tryPressureRatio)
+    initPara=[]
+    for n in range(len(optVarList)):
+        initPara.append(LVclosed_object.defaultParameters[optVarList[n]])
+    iniPara=np.array(initPara)
+    #optimize.fmin(linker,iniPara,xtol=0.001, ftol=0.001)
+    optimize.minimize(linker,iniPara,bounds=bound,tol=0.001)
+
+def optimiseTact(LVclosed_object,time_in_ms,pressure_in_mmHg,folder=None,setHeart=None):
+    if folder is None:
+        folder='optimiseTact'
+    LVclosed_object.defaultRunMode='iterativeRun'
+    LVclosed_object.runCount=folder+'/0'
+    os.makedirs(LVclosed_object.casename+'/'+folder+'/ref',exist_ok=True)
+    np.savetxt(LVclosed_object.casename+'/'+folder+'/ref/p_cav.txt',np.array([[0.,LVclosed_object.defaultParameters['EDP_LV']],[time_in_ms,pressure_in_mmHg]]))
+    cost=cost_function(LVclosed_object.defaultRunMode,matchingFolder=LVclosed_object.casename+'/'+folder+'/ref')
+    cost.addCost('LeftVentriclePressureMeanSquare')
+    linker=optimiser_linker(LVclosed_object,cost)
+    linker.addVariable(['T0_LV'])
+    linker.set_kwargs(endTime=time_in_ms+3,outputResultList=[],setHeart=setHeart)
+    iniPara=np.array([LVclosed_object.defaultParameters['T0_LV']])
+    optimize.minimize(linker,iniPara,bounds=[(1e4,LVclosed_object.defaultParameters['T0_LV']*1.1)],tol=0.001)
+
+def optimiseWinkesselParameters(LVclosed_object,strokeVolume,maxLVLApressureDiff,maxLVAApressureDiff,step=0,Q_regurge_flowratio=0.1,optVarList=None,costList=None,baseFolder=None,folder=None,folderToLVbehavior=None):
+    if folder is None:
+        folder='optimiseWinkesselParameters'
+    if baseFolder is not None:
+        folder=baseFolder+'/'+folder
+    if optVarList is None:
+        optVarList=['aaao1r','Aortic_stenosis','Windkessel_scale_T0_LV']
+        logs=[3.,3.,0]
+    if costList is None:
+        costList=['StrokeVolumeMeanSquare','MaxLVLAPressureMeanSquare','MaxLVAAPressureMeanSquare']
+    os.makedirs(LVclosed_object.casename+'/'+folder+'/ref',exist_ok=True)
+    weights=[]
+    for n in range(len(costList)):
+        if 'StrokeVolume' in costList[n]:
+            weights.append(10./LVclosed_object.defaultParameters['ESV_LV'])
+            np.savetxt(LVclosed_object.casename+'/'+folder+'/ref/V_sv.txt',np.array([strokeVolume]))
+        if 'MaxLVLAPressure' in costList[n]:
+            weights.append(1./maxLVLApressureDiff)
+            np.savetxt(LVclosed_object.casename+'/'+folder+'/ref/pmax_LVLA.txt',np.array([maxLVLApressureDiff]))
+        if 'MaxLVAAPressure' in costList[n]:
+            weights.append(2./(maxLVLApressureDiff+maxLVAApressureDiff))
+            np.savetxt(LVclosed_object.casename+'/'+folder+'/ref/pmax_LVAA.txt',np.array([maxLVAApressureDiff]))
+    LVclosed_object.defaultRunMode='flowrateWindkesselRun'
+    
+    maxLVLA_Q=-LVclosed_object.manualVol(np.arange(LVclosed_object.defaultParameters['BCL'])).min()
+    LVclosed_object.defaultParameters['lvregurgevalveratio']=LVclosed_object.defaultParameters['lalavalvk']/(maxLVLApressureDiff/((maxLVLA_Q*Q_regurge_flowratio)**2.))
+    if step<=0:
+        os.makedirs(LVclosed_object.casename+'/'+folder+'/init_Qratio/best_fit',exist_ok=True)
         
+        
+        #LVclosed_object.defaultParameters['aaao1r']=((maxLVAApressureDiff-LVclosed_object.defaultParameters['lvlvvalvr']*maxLVLA_Q*(1-Q_regurge_flowratio))/((maxLVLA_Q*(1-Q_regurge_flowratio))**2.))/LVclosed_object.defaultParameters['lvlvvalvk']
+        
+        
+        value_count=0
+        tuneVarList=['aaao1r','Aortic_stenosis']
+        LVclosed_object.runCount=folder+'/init_Qratio/'+str(value_count)
+        LVclosed_object.flowrateWindkesselRun()
+        VLV=getCircuitResult(LVclosed_object.casename+'/'+LVclosed_object.runCount,'v(lv)',last_cycle=True)
+        VLA=getCircuitResult(LVclosed_object.casename+'/'+LVclosed_object.runCount,'v(la)',last_cycle=True)
+        VAA=getCircuitResult(LVclosed_object.casename+'/'+LVclosed_object.runCount,'v(aa)',last_cycle=True)
+        real_P_value=[(VLV-VLA).max(),(VLV-VAA).max()]
+        relation=[1,1]
+        ref_value=[maxLVLApressureDiff,maxLVAApressureDiff]
+        tuneratio=[1.,1.]
+        for tuneVarN in range(6):
+            if abs(np.array(real_P_value)/np.array(ref_value)-1).mean()<0.01:
+                break
+            elif abs(real_P_value[tuneVarN%2]/ref_value[tuneVarN%2]-1)<0.005:
+                continue
+            elif real_P_value[tuneVarN%2]<ref_value[tuneVarN%2]:
+                tune=1*relation[tuneVarN%2]
+            else:
+                tune=-1*relation[tuneVarN%2]
+            if tune==1:
+                adj_value=LVclosed_object.defaultParameters[tuneVarList[tuneVarN%2]]*2.
+            else:
+                adj_value=LVclosed_object.defaultParameters[tuneVarList[tuneVarN%2]]/3.
+
+            try_value=LVclosed_object.defaultParameters[tuneVarList[tuneVarN%2]]
+            for n in range(10):
+                if abs(real_P_value[tuneVarN%2]/ref_value[tuneVarN%2]-1)<0.1:
+                    break
+                if (real_P_value[tuneVarN%2]*tune*relation[tuneVarN%2])>(relation[tuneVarN%2]*tune*ref_value[tuneVarN%2]):
+                    adj_value*=0.3
+                    tune*=-1
+                if (try_value+tune*adj_value)<=0.:
+                    adj_value=try_value*0.3
+                try_value+=tune*adj_value
+                value_count+=1
+                LVclosed_object.runCount=folder+'/init_Qratio/'+str(value_count)
+                if tuneVarList[tuneVarN%2]=='aaao1r':
+                    LVclosed_object.defaultParameters['Aortic_stenosis']*=try_value/LVclosed_object.defaultParameters['aaao1r']
+                LVclosed_object.defaultParameters[tuneVarList[tuneVarN%2]]=try_value
+                LVclosed_object.flowrateWindkesselRun()
+                VLV=getCircuitResult(LVclosed_object.casename+'/'+LVclosed_object.runCount,'v(lv)',last_cycle=True)
+                VLA=getCircuitResult(LVclosed_object.casename+'/'+LVclosed_object.runCount,'v(la)',last_cycle=True)
+                VAA=getCircuitResult(LVclosed_object.casename+'/'+LVclosed_object.runCount,'v(aa)',last_cycle=True)
+                real_P_value=[(VLV-VLA).max(),(VLV-VAA).max()]
+                
+                with open(LVclosed_object.casename+'/'+LVclosed_object.runCount+"/runParameters.txt", "r") as f:
+                     old = f.readlines() # read everything in the file
+                old.insert(0,"#PLVLA,PLVAA= "+repr(real_P_value)+" , to match "+repr(ref_value)+" , max LV,LA pressure="+str(VLV.max())+' '+str(VLA.max())+"mmHg \n")
+                with open(LVclosed_object.casename+'/'+LVclosed_object.runCount+"/runParameters.txt", "w") as f:
+                     f.writelines(old)
+                #if (real_P_value[tuneVarN%2]*tune*relation[tuneVarN%2])>(relation[tuneVarN%2]*tune*ref_value[tuneVarN%2]):
+                #    tuneratio[tuneVarN%2]*=0.7
+        cmd = "cp -r " + LVclosed_object.casename+'/'+LVclosed_object.runCount+'/* '+ LVclosed_object.casename+'/'+folder+'/init_Qratio/best_fit'
+        os.system(cmd)
+    #initialise aaao1r' with  'MaxLVAAPressure'
+    if step<=1:
+        #get aaao1r' circuit results with volume data
+        if step==1 and os.path.isfile(LVclosed_object.casename+'/'+folder+'/init_aaao1r/best_fit/runParameters.txt'):
+            results=LVclosed_object.readRunParameters(LVclosed_object.casename+'/'+folder+'/init_aaao1r/best_fit')
+            LVclosed_object.defaultParameters['aaao1r']=results['aaao1r']
+            LVclosed_object.defaultParameters['Aortic_stenosis']=results['Aortic_stenosis']
+        else:
+            results=LVclosed_object.readRunParameters(LVclosed_object.casename+'/'+folder+'/init_Qratio/best_fit')
+            LVclosed_object.defaultParameters['aaao1r']=results['aaao1r']
+            LVclosed_object.defaultParameters['Aortic_stenosis']=results['Aortic_stenosis']
+        os.makedirs(LVclosed_object.casename+'/'+folder+'/init_aaao1r/ref',exist_ok=True)
+        np.savetxt(LVclosed_object.casename+'/'+folder+'/init_aaao1r/ref/pmax_LVLA.txt',np.array([maxLVLApressureDiff]))
+        np.savetxt(LVclosed_object.casename+'/'+folder+'/init_aaao1r/ref/pmax_LVAA.txt',np.array([maxLVAApressureDiff]))
+        
+        for n in [1]:
+            LVclosed_object.runCount=folder+'/init_aaao1r/0'
+            cost=cost_function(LVclosed_object.defaultRunMode,matchingFolder=LVclosed_object.casename+'/'+folder+'/init_aaao1r/ref')
+            cost.addCost(['MaxLVLAPressureMeanSquare','MaxLVAAPressureMeanSquare'],weights=[1./maxLVLApressureDiff,2./(maxLVLApressureDiff+maxLVAApressureDiff)])
+            linker=optimiser_linker(LVclosed_object,cost)
+            linker.addVariable(['aaao1r','Aortic_stenosis'],[(LVclosed_object.defaultParameters['aaao1r']/3.**n,LVclosed_object.defaultParameters['aaao1r']*3.**n),(LVclosed_object.defaultParameters['Aortic_stenosis']/10.**n,LVclosed_object.defaultParameters['Aortic_stenosis']*10.**n)],log=[3.,10.])
+            optimize.minimize(linker,linker.invOperate_para(np.array([LVclosed_object.defaultParameters['aaao1r'],LVclosed_object.defaultParameters['Aortic_stenosis']])),jac='3-point',options={'eps':0.00001,'maxiter':10},tol=0.0001)
+            results=LVclosed_object.readRunParameters(LVclosed_object.casename+'/'+folder+'/init_aaao1r/best_fit')
+            LVclosed_object.defaultParameters['aaao1r']=results['aaao1r']
+            LVclosed_object.defaultParameters['Aortic_stenosis']=results['Aortic_stenosis']
+    results=LVclosed_object.readRunParameters(LVclosed_object.casename+'/'+folder+'/init_aaao1r/best_fit')
+    LVclosed_object.defaultParameters['aaao1r']=results['aaao1r']
+    LVclosed_object.defaultParameters['Aortic_stenosis']=results['Aortic_stenosis']
+    LVclosed_object.defaultRunMode='fullWindkesselRun'
+    if step<=2:
+    
+        #get appropriate Windkessel_scale_T0_LV
+        if step==2 and os.path.isfile(LVclosed_object.casename+'/'+folder+'/init_WindScale/best_fit/runParameters.txt'):
+            init_Windkessel_scale_T0_LV=LVclosed_object.readRunParameters(LVclosed_object.casename+'/'+folder+'/init_WindScale/best_fit')['Windkessel_scale_T0_LV']
+        else:
+            results_LVBehavior=np.loadtxt(LVclosed_object.casename+'/'+folder+'/init_aaao1r/best_fit/circuit_results_lastcycle.txt')
+            temp_SV=results_LVBehavior[:,3].max()-results_LVBehavior[:,3].min()
+            init_Windkessel_scale_T0_LV=min(0.9999999,max(0.0000001,strokeVolume/temp_SV))
+        #initialise 'Windkessel_scale_T0_LV' with Stroke Volume
+        os.makedirs(LVclosed_object.casename+'/'+folder+'/init_WindScale/ref',exist_ok=True)
+        np.savetxt(LVclosed_object.casename+'/'+folder+'/init_WindScale/ref/V_sv.txt',np.array([strokeVolume]))
+        LVclosed_object.runCount=folder+'/init_WindScale/0'
+        cost=cost_function(LVclosed_object.defaultRunMode,matchingFolder=LVclosed_object.casename+'/'+folder+'/init_WindScale/ref')
+        cost.addCost(['StrokeVolumeMeanSquare'])
+        linker=optimiser_linker(LVclosed_object,cost)
+        linker.addVariable(['Windkessel_scale_T0_LV'],[(init_Windkessel_scale_T0_LV*0.5,min(1,init_Windkessel_scale_T0_LV*1.5))])
+        linker.set_kwargs(folderToLVbehavior=folderToLVbehavior)
+        bounds=[(float('-inf'),float('inf'))]
+        optimize.minimize(linker,linker.invOperate_para(np.array([init_Windkessel_scale_T0_LV])),jac='3-point',options={'eps':0.000001,'maxiter':10},tol=0.0001)
+        results=LVclosed_object.readRunParameters(LVclosed_object.casename+'/'+folder+'/init_WindScale/best_fit')['Windkessel_scale_T0_LV']
+        LVclosed_object.defaultParameters['Windkessel_scale_T0_LV']=results
+        for n in range(3):
+            if abs(results-strokeVolume)/strokeVolume<0.01:
+                break
+            LVclosed_object.runCount=folder+'/init_WindScale/0'
+            cost=cost_function(LVclosed_object.defaultRunMode,matchingFolder=LVclosed_object.casename+'/'+folder+'/init_WindScale/ref')
+            cost.addCost(['StrokeVolumeMeanSquare'])
+            linker=optimiser_linker(LVclosed_object,cost)
+            linker.addVariable(['Windkessel_scale_T0_LV'],[(init_Windkessel_scale_T0_LV*0.5,min(1,init_Windkessel_scale_T0_LV*1.5))])
+            linker.set_kwargs(folderToLVbehavior=folderToLVbehavior)
+            bounds=[(float('-inf'),float('inf'))]
+            optimize.minimize(linker,linker.invOperate_para(np.array([init_Windkessel_scale_T0_LV])),jac='3-point',options={'eps':0.000001,'maxiter':10},tol=0.0001)
+            results=LVclosed_object.readRunParameters(LVclosed_object.casename+'/'+folder+'/init_WindScale/best_fit')['Windkessel_scale_T0_LV']
+            LVclosed_object.defaultParameters['Windkessel_scale_T0_LV']=results
+    results=LVclosed_object.readRunParameters(LVclosed_object.casename+'/'+folder+'/init_WindScale/best_fit')['Windkessel_scale_T0_LV']
+        
+    LVclosed_object.defaultParameters['Windkessel_scale_T0_LV']=results
+    if step<=3:
+        #optimise all
+        if step==3 and os.path.isfile(LVclosed_object.casename+'/'+folder+'/best_fit/runParameters.txt'):
+            results=LVclosed_object.readRunParameters(LVclosed_object.casename+'/'+folder+'/best_fit')
+            for n in range(len(optVarList)):
+                LVclosed_object.defaultParameters[optVarList[n]]=results[optVarList[n]]
+        for m in range(3):
+            LVclosed_object.runCount=folder+'/0'
+            iniPara=[]
+            bounds=[]
+            all_limits=[]
+            for n in range(0,len(optVarList)):
+                if optVarList[n]=='aaao1r':
+                    all_limits.append((LVclosed_object.defaultParameters['aaao1r']/3.,LVclosed_object.defaultParameters['aaao1r']*3.))
+                    iniPara.append(LVclosed_object.defaultParameters['aaao1r'])
+                    bounds.append((float('-inf'),float('inf')))
+                if optVarList[n]=='Aortic_stenosis':
+                    all_limits.append((LVclosed_object.defaultParameters['Aortic_stenosis']/3.,min(1.,LVclosed_object.defaultParameters['Aortic_stenosis']*3.)))
+                    iniPara.append(LVclosed_object.defaultParameters['Aortic_stenosis'])
+                    bounds.append((float('-inf'),float('inf')))
+                if optVarList[n]=='Windkessel_scale_T0_LV':
+                    all_limits.append((LVclosed_object.defaultParameters['Windkessel_scale_T0_LV']*0.5,min(1.,LVclosed_object.defaultParameters['Windkessel_scale_T0_LV']*1.5)))
+                    iniPara.append(LVclosed_object.defaultParameters['Windkessel_scale_T0_LV'])
+                    bounds.append((float('-inf'),float('inf')))
+            iniPara=np.array(iniPara)
+            
+            cost=cost_function(LVclosed_object.defaultRunMode,matchingFolder=LVclosed_object.casename+'/'+folder+'/ref')
+            cost.addCost(costList,weights=weights)
+            linker=optimiser_linker(LVclosed_object,cost)
+            linker.addVariable(optVarList,all_limits,log=logs)
+            linker.set_kwargs(folderToLVbehavior=folderToLVbehavior)
+            optimize.minimize(linker,linker.invOperate_para(iniPara),jac='3-point',options={'eps':0.000001,'maxiter':10},tol=0.001)
+            
+            results=LVclosed_object.readRunParameters(LVclosed_object.casename+'/'+folder+'/best_fit')
+            for n in range(len(optVarList)):
+                LVclosed_object.defaultParameters[optVarList[n]]=results[optVarList[n]]
+            
+            
