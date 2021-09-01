@@ -10,6 +10,8 @@ History:
   Author: w.x.chan@gmail.com         21APR2021           - v2.1.0
   Author: w.x.chan@gmail.com         10Jun2021           - v3.0.0
                                                               -added lvregurger/k/b and rvregurger/k/b for regurgitation on lv and rv to la and ra respectively
+  Author: w.x.chan@gmail.com         31Aug2021           - v3.5.0
+                                                              -added Aortic_stenosis to multiple resistances from LV to AO
 '''
 ########################################################################
 _version='3.0.0'
@@ -35,7 +37,7 @@ for comp in linkComponents:
     keyToFill.append(comp+'k')
     keyToFill.append(comp+'b')
     
-suffixDict={4:'T  ',3:'g  ',2:'meg',1:'k  ',0:' ',-1:'m  ',-2:'u  ',-3:'m  ',-4:'p  ',-5:'f  '}
+suffixDict={4:'T  ',3:'g  ',2:'meg',1:'k  ',0:' ',-1:'m  ',-2:'u  ',-3:'n  ',-4:'p  ',-5:'f  '}
 
 def createLVcircuit(casename,paramDict,skipVariableList=None,verbose=True):
 
@@ -56,8 +58,12 @@ def createLVcircuit(casename,paramDict,skipVariableList=None,verbose=True):
             if key in paramDict:
                 if isinstance(paramDict[key],(float,int)):
                     if paramDict[key]!=0:
-                        suffixDict_ind=max(-5,min(4,int(np.floor(np.log10(abs(paramDict[key]))/3.))))
-                        addstr='{:10.6f}'.format(paramDict[key]/(1000.**suffixDict_ind))+suffixDict[suffixDict_ind]
+                        if key in ['lvlvvalvk','lvlvvalvr']:
+                            multiple_value=paramDict['Aortic_stenosis']
+                        else:
+                            multiple_value=1.
+                        suffixDict_ind=max(-5,min(4,int(np.floor(np.log10(abs(paramDict[key]*multiple_value))/3.))))
+                        addstr='{:10.6f}'.format(paramDict[key]*multiple_value/(1000.**suffixDict_ind))+suffixDict[suffixDict_ind]
             cmd = "sed -i.bak s/'<<"+key+">>'/'" + addstr + "'/g " + cirfilename
             os.system(cmd)
     if "cycle" not in skipVariableList:

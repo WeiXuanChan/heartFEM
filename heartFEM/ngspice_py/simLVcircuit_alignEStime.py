@@ -25,7 +25,7 @@ import numpy as np
 from scipy import interpolate
 ########################################################################
 
-suffixDict={4:'T  ',3:'g  ',2:'meg',1:'k  ',0:' ',-1:'m  ',-2:'u  ',-3:'m  ',-4:'p  ',-5:'f  '}
+suffixDict={4:'T  ',3:'g  ',2:'meg',1:'k  ',0:' ',-1:'m  ',-2:'u  ',-3:'n  ',-4:'p  ',-5:'f  '}
 
 def simLVcircuit_alignEStime(casename,stopTime,lvufile,period,targetEStime,init_timetopeaktension,try_timetopeaktension=None,lvinputvar='V',initLAvol=0,initRAvol=0,initLVvol=0,initRVvol=0,vla0=None,vra0=None,init_file=None,init_time=None,iterationNumber=100,verbose=True):
 

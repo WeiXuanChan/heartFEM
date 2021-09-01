@@ -1,4 +1,5 @@
-*version 3.4.0
+*version 3.5.0
+*units in Pressure:mmHg, Volume:mL, time:s
 
 .title LV full circuit
 
@@ -19,7 +20,7 @@
 .func disfrompeak(xtime,peaktime,width) {min( abs( manmod(xtime) - peaktime) , heartperiod - abs( manmod(xtime) - peaktime))}
 .func cossq(xtime,amp,peaktime,width) {amp * cos( PI * disfrompeak( xtime , peaktime , width ) / width)^2}
 
-.model valve sidiode(Roff=10k Ron=1m Rrev=10 Vfwd=0.1 Vrev=1k Revepsilon=0.2 Epsilon=0.2)
+.model valve sidiode(Roff=1meg Ron=1n Rrev=10 Vfwd=0 Vrev=1k Revepsilon=0.1 Epsilon=0.1)
 
 .subckt vein in out rval=100k lval=1n
 R1 1  out    r = rval
@@ -201,6 +202,6 @@ set controlswait
 set filetype=ascii
 set wr_vecnames
 run
-wrdata <<outfile>> v(lv) v(lvvol) v(la) v(rv) v(ra) v(pa1) v(aa) i(Vlvprobe) v(phasetime)
+wrdata <<outfile>> v(lv) v(lvvol) v(la) v(rv) v(ra) v(pa1) v(aa) i(Vlvprobe) v(phasetime) v(rvvol) i(Vlalavalv) i(Vlvlvvalv) i(Vlvregurgitation) 
 .endc 
 .end

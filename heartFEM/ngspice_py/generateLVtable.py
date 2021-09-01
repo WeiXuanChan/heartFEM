@@ -12,9 +12,11 @@ History:
                                                             -debug when stackaddstr is not sorted and/or not unique
   Author: w.x.chan@gmail.com         12MAY2021           - v2.3.4
                                                             -debug read LVtablefile before savetxt
+  Author: w.x.chan@gmail.com         12Aug2021           - v3.5.0
+                                                            -added 'Windkessel_scale_T0_LV'
 '''
 ########################################################################
-_version='2.3.4'
+_version='3.5.0'
 import logging
 logger = logging.getLogger(__name__)
 
@@ -39,9 +41,9 @@ for comp in linkComponents:
     keyToFill.append(comp+'k')
     keyToFill.append(comp+'b')
     
-suffixDict={4:'T  ',3:'g  ',2:'meg',1:'k  ',0:' ',-1:'m  ',-2:'u  ',-3:'m  ',-4:'p  ',-5:'f  '}
+suffixDict={4:'T  ',3:'g  ',2:'meg',1:'k  ',0:' ',-1:'m  ',-2:'u  ',-3:'n  ',-4:'p  ',-5:'f  '}
 
-def generateLVtable(casename,period,timetopeak=None,verbose=True,stackaddstr=None,loading_casename=None):
+def generateLVtable(casename,period,timetopeak=None,verbose=True,stackaddstr=None,loading_casename=None,scale_T0_LV=1.):
     #period same units as timeSpace
     logger.info('*** generateLVtable ***')
     if loading_casename is None:
@@ -74,7 +76,7 @@ def generateLVtable(casename,period,timetopeak=None,verbose=True,stackaddstr=Non
         datatable=np.array(datatable[0])
     datatable=datatable[sortVolume]
     
-    datatable=datatable.T
+    datatable=datatable.T*scale_T0_LV
     np.savetxt(LVtablefile,datatable,fmt='%.9e')
 
     with open(LVtablefile,'r') as f:
