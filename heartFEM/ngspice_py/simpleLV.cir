@@ -92,8 +92,6 @@ alvregurgitation  lvregurp2   lavalvp1    valve
 .else
 Vlvregurgitation  lvregurp1   gnd         dc 0
 .endif
-itation  rvregurp1   gnd         dc 0
-.endif
 
 Cart   art    gnd    <<artc>>
 Cven   ven    gnd    <<artc>>
