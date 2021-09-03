@@ -1,7 +1,7 @@
 *version 3.5.1
 *units in Pressure:mmHg, Volume:mL, time:s
 
-.title LV full circuit
+.title simple LV circuit
 
 .PARAM PI = 3.14159265359
 .PARAM heartperiod = <<cycle>>
