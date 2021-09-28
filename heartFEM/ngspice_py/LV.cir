@@ -1,4 +1,4 @@
-*version 3.5.0
+*version 3.5.1
 *units in Pressure:mmHg, Volume:mL, time:s
 
 .title LV full circuit
@@ -11,6 +11,7 @@
 .PARAM freq3 = 3 / heartperiod
 .PARAM freq4 = 4 / heartperiod
 .PARAM trackrelaxphase = 0
+.PARAM switchvalve = <<switchvalve>>
 .PARAM lvregurgitation = <<lvregurger>>
 .PARAM lvregurgitationvalveratio = <<lvregurgevalveratio>>
 .PARAM rvregurgitation = <<rvregurger>>
@@ -20,7 +21,12 @@
 .func disfrompeak(xtime,peaktime,width) {min( abs( manmod(xtime) - peaktime) , heartperiod - abs( manmod(xtime) - peaktime))}
 .func cossq(xtime,amp,peaktime,width) {amp * cos( PI * disfrompeak( xtime , peaktime , width ) / width)^2}
 
-.model valve sidiode(Roff=1meg Ron=1n Rrev=10 Vfwd=0 Vrev=1k Revepsilon=0.1 Epsilon=0.1)
+.model valve sidiode(Roff=10k Ron=1m Rrev=10 Vfwd=0.1 Vrev=1k Revepsilon=0.2 Epsilon=0.2)
+
+.subckt swdiode a k a1
+s1 a k a1 k diosw
+.model diosw sw vt=0 vh=0.001 ron=100n roff=10e9
+.ends swdiode
 
 .subckt vein in out rval=100k lval=1n
 R1 1  out    r = rval
@@ -94,45 +100,72 @@ Ervu   rvgnd2  gnd     vol = 'v(rv)'
 Elau   lagnd2  gnd     vol = 'cossq( TIME ,<<laamp>>,<<lapeaktime>>,<<lawidth>>)'
 Erau   ragnd2  gnd     vol = 'cossq( TIME ,<<raamp>>,<<rapeaktime>>,<<rawidth>>)'
 
-Xlalavalv  la  lavalvp1    vein  rval=<<lalavalvr>>    lval=<<lalavalvl>>
 Vlalavalv  lavalvp1 lavalvp2 dc 0
-Blalavalv  lavalvp2 lavalv V=' <<lalavalvk>> * ( i(Vlalavalv) ^2 )^( <<lalavalvb>> / 2) * sgn( i(Vlalavalv) ) '
-Xlvlvvalv  lv  lvvalvp1    vein  rval=<<lvlvvalvr>>    lval=<<lvlvvalvl>>
-Vlvlvvalv  lvvalvp1 lvvalvp2 dc 0
-Blvlvvalv  lvvalvp2 lvvalv V=' <<lvlvvalvk>> * ( i(Vlvlvvalv) ^2 )^( <<lvlvvalvb>> / 2) * sgn( i(Vlvlvvalv) ) '
-Xraravalv  ra  ravalvp1    vein  rval=<<raravalvr>>    lval=<<raravalvl>>
+Vlvlvvalv  lv  lvvalvp1 dc 0
 Vraravalv  ravalvp1 ravalvp2 dc 0
+Vrvrvvalv  rv  rvvalvp1 dc 0
+
+Blalavalv  lavalvp2 lavalv V=' <<lalavalvk>> * ( i(Vlalavalv) ^2 )^( <<lalavalvb>> / 2) * sgn( i(Vlalavalv) ) '
+
+Blvlvvalv  lvvalvp1 lvvalvp2 V=' <<lvlvvalvk>> * ( i(Vlvlvvalv) ^2 )^( <<lvlvvalvb>> / 2) * sgn( i(Vlvlvvalv) ) '
+
 Braravalv  ravalvp2 ravalv V=' <<raravalvk>> * ( i(Vraravalv) ^2 )^( <<raravalvb>> / 2) * sgn( i(Vraravalv) ) '
-Xrvrvvalv  rv  rvvalvp1    vein  rval=<<rvrvvalvr>>    lval=<<rvrvvalvl>>
-Vrvrvvalv  rvvalvp1 rvvalvp2 dc 0
-Brvrvvalv  rvvalvp2 rvvalv V=' <<rvrvvalvk>> * ( i(Vrvrvvalv) ^2 )^( <<rvrvvalvb>> / 2) * sgn( i(Vrvrvvalv) ) '
+
+Brvrvvalv  rvvalvp1 rvvalvp2 V=' <<rvrvvalvk>> * ( i(Vrvrvvalv) ^2 )^( <<rvrvvalvb>> / 2) * sgn( i(Vrvrvvalv) ) '
+
+Bfo  fovalvp2 fovalv V=' <<fok>> * ( i(Vfo) ^2 )^( <<fob>> / 2) * sgn( i(Vfo) ) '
 
 
-alv   lvvalv   aa    valve
+.if (switchvalve==0)
+ala   lavalv   lv      valve
+alv   lvvalvp2 lvvalv  valve
+ara   ravalv   rv    valve
+arv   rvvalvp2 rvvalv    valve
+afo   fovalv   la    valve
+.else
+Xla   lavalv   lv     lavalvp1  swdiode
+Xlv   lvvalvp2 lvvalv lv        swdiode
+Xra   ravalv   rv     ravalvp1  swdiode
+Xrv   rvvalvp2 rvvalv rv        swdiode
+Xfo   fovalv   la     fovalvp1  swdiode
+.endif
+
+
 .if (lvregurgitation > 0)
-Rlvregurgitation lv lvregurp1             r = lvregurgitation
+Rlvregurgitation lv        lvregurp1      r = lvregurgitation
 Vlvregurgitation lvregurp1 lavalvp1       dc 0
 .elseif (lvregurgitationvalveratio > 0)
 Vlvregurgitation  lv          lvregurp1   dc 0
 Blvregurgitation  lvregurp1   lvregurp2   V=' <<lalavalvk>> / lvregurgitationvalveratio * ( i(Vlvregurgitation) ^2 )^( <<lalavalvb>> / 2) * sgn( i(Vlvregurgitation) ) '
+.if (switchvalve==0)
 alvregurgitation  lvregurp2   lavalvp1    valve
 .else
-Vlvregurgitation  lvregurp1   gnd         dc 0
+Xlvregurgitation  lvregurp2   lavalvp1  lv   swdiode
 .endif
-ala   lavalv   lv    valve
-arv   rvvalv   pa1   valve
+.else
+Vlvregurgitation   lv          lvregurp1   dc 0
+Vlvregurgitation2  lavalvp1    lvregurp2   dc 0
+.endif
+
+
+
 .if (rvregurgitation > 0)
-Rrvregurgitation rv rvregurp1             r = rvregurgitation
-Vrvregurgitation rvregurp1                rvvalvp1 dc 0
+Rrvregurgitation rv         rvregurp1     r = rvregurgitation
+Vrvregurgitation rvregurp1  ravalvp1      dc 0
 .elseif (rvregurgitationvalveratio > 0)
 Vrvregurgitation  rv          rvregurp1   dc 0
 Brvregurgitation  rvregurp1   rvregurp2   V=' <<raravalvk>> / rvregurgitationvalveratio * ( i(Vrvregurgitation) ^2 )^( <<raravalvb>> / 2) * sgn( i(Vrvregurgitation) ) '
+.if (switchvalve==0)
 arvregurgitation  rvregurp2   ravalvp1    valve
 .else
-Vrvregurgitation  rvregurp1   gnd         dc 0
+Xrvregurgitation  rvregurp2   ravalvp1  rv  swdiode
 .endif
-ara   ravalv   rv    valve
-afo   fovalv   la    valve
+.else
+Vrvregurgitation  rv          rvregurp1     dc 0
+Vrvregurgitation2 ravalvp1    rvregurp2     dc 0
+.endif
+
+
 
 Caa   aa    gnd    <<aac>>    
 Cao1  ao1   gnd    <<ao1c>>   
@@ -153,6 +186,12 @@ Cpa2  pa2   gnd    <<pa2c>>
 Cplac plac  gnd    <<placc>>  
 Csvc  svc   gnd    <<svcc>>  
 Cuv   uv    gnd    <<uvc>>   
+
+Xlalavalv  la  lavalvp1    vein  rval=<<lalavalvr>>    lval=<<lalavalvl>>
+Xlvlvvalv  lvvalv   aa    vein  rval=<<lvlvvalvr>>    lval=<<lvlvvalvl>>
+Xraravalv  ra  ravalvp1    vein  rval=<<raravalvr>>    lval=<<raravalvl>>
+Xrvrvvalv  rvvalv   pa1   vein  rval=<<rvrvvalvr>>    lval=<<rvrvvalvl>>
+
 
 Xcabr     ca    br     vein  rval=<<cabrr>>     lval=<<cabrl>>
 Xbrsvc    br    svc    vein  rval=<<brsvcr>>    lval=<<brsvcl>>
@@ -188,7 +227,6 @@ Vdv  ivcp1 ivcp2 dc 0
 Bdv  ivcp2 ivc V=' <<dvk>> * ( i(Vdv) ^2 )^( <<dvb>> / 2) * sgn( i(Vdv) ) '
 Xfo       ivc   fovalvp1 vein  rval=<<for>>    lval=<<fol>>
 Vfo  fovalvp1 fovalvp2 dc 0
-Bfo  fovalvp2 fovalv V=' <<fok>> * ( i(Vfo) ^2 )^( <<fob>> / 2) * sgn( i(Vfo) ) '
 
 .options savecurrents
 
@@ -202,6 +240,6 @@ set controlswait
 set filetype=ascii
 set wr_vecnames
 run
-wrdata <<outfile>> v(lv) v(lvvol) v(la) v(rv) v(ra) v(pa1) v(aa) i(Vlvprobe) v(phasetime) v(rvvol) i(Vlalavalv) i(Vlvlvvalv) i(Vlvregurgitation) 
+wrdata <<outfile>> v(lv) v(lvvol) v(la) v(rv) v(ra) v(pa1) v(aa) v(lavalvp1) v(lvvalv) i(Vlvprobe) v(phasetime) v(rvvol) i(Vlalavalv) i(Vlvlvvalv) i(Vlvregurgitation) v(lvregurp2) v(lvvalvp2) i(Vrvprobe)
 .endc 
 .end

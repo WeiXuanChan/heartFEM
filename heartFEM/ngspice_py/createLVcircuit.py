@@ -12,9 +12,12 @@ History:
                                                               -added lvregurger/k/b and rvregurger/k/b for regurgitation on lv and rv to la and ra respectively
   Author: w.x.chan@gmail.com         31Aug2021           - v3.5.0
                                                               -added Aortic_stenosis to multiple resistances from LV to AO
+  Author: w.x.chan@gmail.com         03Sep2021           - v3.5.1
+                                                              -added stepTime, in micro seconds
+                                                              - added switchvalve
 '''
 ########################################################################
-_version='3.0.0'
+_version='3.5.1'
 import logging
 logger = logging.getLogger(__name__)
 
@@ -39,7 +42,7 @@ for comp in linkComponents:
     
 suffixDict={4:'T  ',3:'g  ',2:'meg',1:'k  ',0:' ',-1:'m  ',-2:'u  ',-3:'n  ',-4:'p  ',-5:'f  '}
 
-def createLVcircuit(casename,paramDict,skipVariableList=None,verbose=True):
+def createLVcircuit(casename,paramDict,stepTime=10,skipVariableList=None,verbose=True):
 
     logger.info('*** createLVcircuit ***')
     if skipVariableList is None:
@@ -80,6 +83,9 @@ def createLVcircuit(casename,paramDict,skipVariableList=None,verbose=True):
         if side+"vregurgevalveratio" not in skipVariableList:
             cmd = "sed -i.bak s/'<<"+side+"vregurgevalveratio>>'/'" + str(paramDict[side+"vregurgevalveratio"]) + "'/g " + cirfilename
             os.system(cmd)
+    if "switchvalve" not in skipVariableList:
+        cmd = "sed -i.bak s/'<<switchvalve>>'/'" + str(paramDict["switchvalve"])+ "'/g " + cirfilename
+        os.system(cmd)
     if "rvfunc" not in skipVariableList:
         cmd = "sed -i.bak s/'<<rvfunc>>'/'" + paramDict['rvfunc'] + "'/g " + cirfilename
         os.system(cmd)
@@ -102,7 +108,7 @@ def createLVcircuit(casename,paramDict,skipVariableList=None,verbose=True):
             os.system(cmd)
     
     if "stepTime" not in skipVariableList:
-        cmd = "sed -i.bak s/'<<stepTime>>'/'" + '10u'+ "'/g " + cirfilename
+        cmd = "sed -i.bak s/'<<stepTime>>'/'" + str(stepTime)+'u'+ "'/g " + cirfilename
         os.system(cmd)
     if skipVariableList is None:
         rvdatabase=np.loadtxt(casename+'_rvflowrate.txt')

@@ -10,9 +10,11 @@ History:
   Author: w.x.chan@gmail.com         09JUN2021           - v3.0.0
                                                               -adjust EStime to within 0.1% od minimum volume
                                                               -adjust try_initLVvol=initLVvol*1.05
+  Author: w.x.chan@gmail.com         28Sep2021           - v3.5.1
+                                                              -add 2nd guess for adjust EDVol
 '''
 ########################################################################
-_version='3.0.0'
+_version='3.5.1'
 import logging
 logger = logging.getLogger(__name__)
 
@@ -116,16 +118,20 @@ def simLVcircuit_align_EDvol_and_EStime(casename,stopTime,lvufile,period,targetE
         elif currentinitLVvol>targetinitLVvol:
             if tune_initLVvol is None:
                 tune_initLVvol=-1
+                try_initLVvol=try_initLVvol*targetinitLVvol/currentinitLVvol
             elif tune_initLVvol>0:
                 tune_initLVvol=-1
                 adj_try_initLVvol=adj_try_initLVvol*0.33
-            try_initLVvol=try_initLVvol+tune_initLVvol*adj_try_initLVvol
+                try_initLVvol=try_initLVvol+tune_initLVvol*adj_try_initLVvol
         elif currentinitLVvol<targetinitLVvol:
             if tune_initLVvol is None:
                 tune_initLVvol=1
+                try_initLVvol=try_initLVvol*targetinitLVvol/currentinitLVvol
             elif tune_initLVvol<0:
                 tune_initLVvol=1
                 adj_try_initLVvol=adj_try_initLVvol*0.33
-            try_initLVvol=try_initLVvol+tune_initLVvol*adj_try_initLVvol
+                try_initLVvol=try_initLVvol+tune_initLVvol*adj_try_initLVvol
         last_currentinitLVvol=currentinitLVvol
+    if abs(cir_results[0,-1]/cir_results[0,1]-1)>0.05:
+        logger.warning("Circuit might not converged, last cycle: start EDvol="+repr(cir_results[0,1])+', end EDvol='+repr(cir_results[0,-1]))
     return (try_initLVvol,adj_try_initLVvol)
