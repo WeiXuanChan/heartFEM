@@ -42,8 +42,10 @@ History:
   Author: w.x.chan@gmail.com         12Aug2021           - v3.5.0
                                                             -added 'Windkessel_scale_T0_LV'
                                                             -added Aortic_stenosis to multiple resistances from LV to AO
+  Author: w.x.chan@gmail.com         20Sep2021           - v3.5.1
+                                                            -added switchvalve
 '''
-_version='3.5.0'
+_version='3.5.1'
 import logging
 logger = logging.getLogger(__name__)
 
@@ -304,6 +306,7 @@ class heartParameters(dict):
             self['lvregurgevalveratio']=-1
             self['rvregurger']=-1
             self['rvregurgevalveratio']=-1
+            self['switchvalve']=0
             
             self['ES_time']=None
             self['vla0']=None
