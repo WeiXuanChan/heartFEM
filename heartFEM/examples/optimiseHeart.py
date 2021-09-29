@@ -1,4 +1,4 @@
-case='CASEPATH'
+case='/media/yaplab/DATA/fetalheartFEM/preSurgery/Case_088_all'
 
 import logging
 logging.basicConfig(level=logging.INFO,filename=case+'/optimiseHeart.txt')
@@ -11,6 +11,7 @@ from scipy import optimize
 
 age=np.loadtxt(case+'/age.txt')
 hf=heartFEM.LVclosed(defaultAge='fetal'+str(age))
+normal_Avalve_k=hf.defaultParameters['lvlvvalvk']
 hf.casename=case
 hf.meshname='t0'
 volumeFile='volume2.txt'
@@ -60,4 +61,19 @@ hf.defaultParameters['EDP_LV']=hf.readRunParameters(case+'/LVBehavior')['EDP_LV'
 
 hf.defaultParameters['ESV_LV']=volumes.min()
 pressureDiff_LVAO=pressureDiff_LVAO_LVLA[0,1]
-heartFEM.optimiseAllWinkesselParameters(hf,hf.defaultParameters['EDV_LV']-hf.defaultParameters['ESV_LV'],pressureDiff_LVAO_LVLA[1,1],pressureDiff_LVAO,Q_regurge_flowratio=0.6,folderToLVbehavior='LVBehavior',runcycle=20)
+heartFEM.optimiseAllWinkesselParameters(hf,hf.defaultParameters['EDV_LV']-hf.defaultParameters['ESV_LV'],pressureDiff_LVAO_LVLA[1,1],pressureDiff_LVAO,Q_regurge_flowratio=0.6,folderToLVbehavior='LVBehavior',runCycles=20)
+
+for lastiter in range(0,10):
+    if not(os.path.isfile(case+'/optimiseWinkesselParameters/'+str(lastiter+1)+'/init_WindScale/best_fit/circuit_results_lastcycle.txt')):
+        break
+results=hf.readRunParameters(case+'/optimiseWinkesselParameters/'+str(lastiter)+'/init_WindScale/best_fit')
+hf.defaultParameters['lvlvvalvk']=results['lvlvvalvk']
+hf.defaultParameters['lvregurgevalveratio']=results['lvregurgevalveratio']
+hf.defaultParameters['Windkessel_scale_T0_LV']=results['Windkessel_scale_T0_LV']
+diesease_Avalve_k=hf.defaultParameters['lvlvvalvk']
+hf.defaultParameters['aaregurgevalveratio']=1
+os.makedirs(case+'/simpostsurgery',exist_ok=True)
+for n in np.linspace(0,1,num=10):
+    hf.runCount="simpostsurgery/lvlvvalvk_{0:.2f}".format(n)
+    hf.defaultParameters['lvlvvalvk']=diesease_Avalve_k*(1.-n)+n*normal_Avalve_k
+    hf.fullWindkesselRun(unloadGeo=True,folderToLVbehavior="LVBehavior",runCycles=20)
