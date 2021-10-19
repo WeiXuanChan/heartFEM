@@ -12,9 +12,11 @@ History:
                                                               -adjust try_initLVvol=initLVvol*1.05
   Author: w.x.chan@gmail.com         28Sep2021           - v3.5.1
                                                               -add 2nd guess for adjust EDVol
+  Author: w.x.chan@gmail.com         28Sep2021           - v3.6.0
+                                                              -debug remove exit when not converged
 '''
 ########################################################################
-_version='3.5.1'
+_version='3.6.0'
 import logging
 logger = logging.getLogger(__name__)
 
@@ -105,31 +107,34 @@ def simLVcircuit_align_EDvol_and_EStime(casename,stopTime,lvufile,period,targetE
         case_dir,outfilename = os.path.split(casename)
         cir_results=np.loadtxt(case_dir+'/'+'circuit_results.txt',skiprows=1)[:,2:4]
         cir_results[:,0]*=1000. #set to ms
+        removePeriodCount=0
         while cir_results[-1,0]>=(2.*period):
             cir_results[:,0]-=period
+            removePeriodCount+=1
         cir_results=cir_results[cir_results[:,0]>=0]
         cir_results=cir_results[cir_results[:,0]<period]
         currentinitLVvol=cir_results[0,1]
-        logger.info("  Current EDvol="+repr(currentinitLVvol)+', target EDvol='+repr(targetinitLVvol))
-        if abs(currentinitLVvol-targetinitLVvol)<(targetinitLVvol*10.**-4.) or adj_try_initLVvol<(targetinitLVvol*10.**-4.):
+        #np.savetxt(casename+'extracted_circuit_results_'+str(n)+'.txt',cir_results)
+        logger.info("  Current EDvol="+repr(currentinitLVvol)+', target EDvol='+repr(targetinitLVvol)+" , time="+repr(cir_results[0,0]+removePeriodCount*period))
+        if abs(currentinitLVvol-targetinitLVvol)<(targetinitLVvol*10.**-4.) or adj_try_initLVvol<(targetinitLVvol*10.**-5.):
             break
-        elif abs(last_currentinitLVvol-currentinitLVvol)<(targetinitLVvol*10.**-4.):
-            return (try_initLVvol-tune_initLVvol*adj_try_initLVvol,adj_try_initLVvol)
         elif currentinitLVvol>targetinitLVvol:
             if tune_initLVvol is None:
                 tune_initLVvol=-1
                 try_initLVvol=try_initLVvol*targetinitLVvol/currentinitLVvol
-            elif tune_initLVvol>0:
-                tune_initLVvol=-1
-                adj_try_initLVvol=adj_try_initLVvol*0.33
+            else:
+                if tune_initLVvol>0:
+                    tune_initLVvol=-1
+                    adj_try_initLVvol=adj_try_initLVvol*0.33
                 try_initLVvol=try_initLVvol+tune_initLVvol*adj_try_initLVvol
         elif currentinitLVvol<targetinitLVvol:
             if tune_initLVvol is None:
                 tune_initLVvol=1
                 try_initLVvol=try_initLVvol*targetinitLVvol/currentinitLVvol
-            elif tune_initLVvol<0:
-                tune_initLVvol=1
-                adj_try_initLVvol=adj_try_initLVvol*0.33
+            else:
+                if tune_initLVvol<0:
+                    tune_initLVvol=1
+                    adj_try_initLVvol=adj_try_initLVvol*0.33
                 try_initLVvol=try_initLVvol+tune_initLVvol*adj_try_initLVvol
         last_currentinitLVvol=currentinitLVvol
     if abs(cir_results[0,-1]/cir_results[0,1]-1)>0.05:

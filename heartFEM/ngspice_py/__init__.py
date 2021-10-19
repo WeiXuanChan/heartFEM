@@ -62,3 +62,20 @@ from heartFEM.ngspice_py.createLVcircuit            import *
 from heartFEM.ngspice_py.simLVcircuit               import *
 from heartFEM.ngspice_py.generateLVtable            import *
 from heartFEM.ngspice_py.simLVcircuit_alignEStime   import *
+
+import numpy as np
+def getLastcycleCircuitResults(BCL,path,filename):
+    #BCL in ms
+    cir_results=np.loadtxt(path+'/'+filename+'.txt',skiprows=1)
+    with open(path+'/'+filename+'.txt','r') as f:
+        cir_results_header=f.readline()
+    if cir_results_header[-1]=='\n':
+        cir_results_header=cir_results_header[:-1]
+    cir_results_header=cir_results_header[1:]
+    cir_results[:,0]*=1000. #set to ms
+    while cir_results[-1,0]>=(2.*BCL):
+        cir_results[:,0]-=BCL
+    cir_results=cir_results[cir_results[:,0]>=0]
+    cir_results=cir_results[cir_results[:,0]<BCL]
+    np.savetxt(path+'/'+filename+'_lastcycle.txt',cir_results,header=cir_results_header,comments='#')
+    return

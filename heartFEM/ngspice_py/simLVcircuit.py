@@ -164,7 +164,7 @@ def simLVcircuit(casename,stopTime,lvufile,lvinputvar='V',initLAvol=0,initRAvol=
     
     if additionalVarDict is not None:
         for key in additionalVarDict:
-            cmd = "sed -i.bak s/'<<"+key+">>'/'"+additionalVarDict[key]+"'/g " + cirtempfilename
+            cmd = "sed -i.bak s/'<<"+key+">>'/'"+str(additionalVarDict[key])+"'/g " + cirtempfilename
             os.system(cmd)
     cmd = "ngspice -o "+cirlogfilename+" -b " + cirtempfilename
     os.system(cmd)
@@ -183,4 +183,90 @@ def simLVcircuit(casename,stopTime,lvufile,lvinputvar='V',initLAvol=0,initRAvol=
     #    cmd = "rm " +cur_dir+'/temp_'+lvufilename
     #    os.system(cmd)
 
- 
+def simcirFile(cirtempfilename,lvufile,lvinputvar,BCL=None,toFolder=None,init_file=None,init_time=None,timetopeak_from_to=None,additionalVarDict=None,editCircuit=None,identifyName=None):
+    if identifyName is None:
+        identifyName='newcircuit'
+    if editCircuit is None:
+        editCircuit={}
+    newcirfilename=cirtempfilename[:-4]+'_'+identifyName+'.cir'
+    cirlogfilename=newcirfilename[:-4]+'.log'
+    cmd = "cp " + cirtempfilename + " " + newcirfilename
+    os.system(cmd)
+    casename,temp = os.path.split(cirtempfilename)
+    with open(newcirfilename,'r') as f:
+        lines=f.readlines()
+    for n in range(len(lines)):
+        if lines[n][:-1] in editCircuit.keys():
+            lines[n]=editCircuit[lines[n][:-1]]+'\n'
+        if lines[n][:6]=='wrdata':
+            outfilename=lines[n].split(" ")[1]
+    with open(newcirfilename,'w') as f:
+        f.writelines(lines)
+    
+    if lvinputvar in ['i','v','I','V']:
+        if os.path.isfile(lvufile):
+            case_dir,lvufilename = os.path.split(lvufile)
+        else:
+            data=np.array(lvufile)
+            case_dir=os.getcwd()
+            lvufilename='lvufile.txt'
+            lvufile=os.getcwd()+'/'+lvufilename
+            np.savetxt(lvufile,data)
+            
+        if init_file is not None and init_time is not None:
+            data=np.loadtxt(lvufile)
+            init_data=np.loadtxt(init_file)
+            init_data=init_data[init_data[:,0]<init_time]
+            data=np.concatenate((init_data,data+np.array([[init_time,0.]])),axis=0)
+            np.savetxt(os.getcwd()+'/temp_'+lvufilename,data)
+        else:
+            cmd = "cp "+lvufile+" " +'./temp_'+lvufilename
+            os.system(cmd)
+    elif lvinputvar[:7]=='table2d':
+        case_dir,lvufilename = os.path.split(lvufile)
+        cmd = "cp "+lvufile+" " +'./temp_'+lvufilename
+        os.system(cmd)
+        if timetopeak_from_to is not None:
+            if timetopeak_from_to[1]!=timetopeak_from_to[0]:
+                with open(os.getcwd()+'/temp_'+lvufilename,'r') as f:
+                    lines=f.readlines()
+                ytime=np.loadtxt(lvufile,skiprows=8,max_rows=1).reshape(-1)
+                setAbove=(ytime>=(timetopeak_from_to[0]/1000.))
+                setBelow=(ytime<(timetopeak_from_to[0]/1000.))
+                ytime[setAbove]=ytime[setAbove]+(timetopeak_from_to[1]-timetopeak_from_to[0])/1000.
+                ytime[setBelow]=ytime[setBelow]*(timetopeak_from_to[1]/timetopeak_from_to[0])
+                ytime=np.round(ytime,decimals=4)
+                lines[8]=' '.join(ytime.astype(str))+'\n'
+                with open(os.getcwd()+'/temp_'+lvufilename,'w') as f:
+                    f.writelines(lines)
+            
+        cmd = "cp "+lvufile[:-4]+'base.txt'+" " +'./temp_'+lvufilename[:-4]+'base.txt'
+        os.system(cmd)
+        if lvinputvar=='table2dtrackrelaxphase':
+            cmd = "cp "+lvufile[:-4]+'tr.txt'+" " +'./temp_'+lvufilename[:-4]+'tr.txt'
+            os.system(cmd)
+    if additionalVarDict is not None:
+        for key in additionalVarDict:
+            cmd = "sed -i.bak s/'<<"+key+">>'/'"+str(additionalVarDict[key])+"'/g " + newcirfilename
+            os.system(cmd)
+    cmd = "ngspice -o "+cirlogfilename+" -b " + newcirfilename
+    os.system(cmd)
+    folder,savecirresultfilename= os.path.split(newcirfilename)
+    if toFolder is not None:
+        folder=folder+'/'+toFolder
+        os.makedirs(folder,exist_ok=True)
+    savecirresultfile=folder+'/'+savecirresultfilename[:-4]+'_circuit_results.txt'
+        
+    cmd = "mv " +'./'+outfilename+' '+savecirresultfile
+    os.system(cmd)
+    if BCL is not None:
+        ngspice_py.getLastcycleCircuitResults(BCL,folder,savecirresultfilename[:-4]+'_circuit_results')
+    cmd = "rm "+'./temp_'+lvufilename
+    os.system(cmd)
+    if lvinputvar[:7]=='table2d':
+        cmd = "rm "+'./temp_'+lvufilename[:-4]+'base.txt'
+        os.system(cmd)
+        if lvinputvar=='table2dtrackrelaxphase':
+            cmd = "rm "+'./temp_'+lvufilename[:-4]+'tr.txt'
+            os.system(cmd)
+        

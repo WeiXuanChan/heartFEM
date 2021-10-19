@@ -1,4 +1,4 @@
-*version 3.5.1
+*version 3.6.0
 *units in Pressure:mmHg, Volume:mL, time:s
 
 .title LV full circuit
@@ -14,8 +14,12 @@
 .PARAM switchvalve = <<switchvalve>>
 .PARAM lvregurgitation = <<lvregurger>>
 .PARAM lvregurgitationvalveratio = <<lvregurgevalveratio>>
+.PARAM aaregurgitation = <<aaregurger>>
+.PARAM aaregurgitationvalveratio = <<aaregurgevalveratio>>
 .PARAM rvregurgitation = <<rvregurger>>
 .PARAM rvregurgitationvalveratio = <<rvregurgevalveratio>>
+.PARAM pa1regurgitation = <<pa1regurger>>
+.PARAM pa1regurgitationvalveratio = <<pa1regurgevalveratio>>
 
 .func manmod(shorttime) {shorttime - floor(shorttime / heartperiod) * heartperiod}
 .func disfrompeak(xtime,peaktime,width) {min( abs( manmod(xtime) - peaktime) , heartperiod - abs( manmod(xtime) - peaktime))}
@@ -132,8 +136,8 @@ Xfo   fovalv   la     fovalvp1  swdiode
 
 
 .if (lvregurgitation > 0)
-Rlvregurgitation lv        lvregurp1      r = lvregurgitation
-Vlvregurgitation lvregurp1 lavalvp1       dc 0
+Vlvregurgitation  lv          lvregurp1   dc 0
+Blvregurgitation  lvregurp1   lvregurp2   V=' lvregurgitation * ( i(Vlvregurgitation) ^2 )^( <<lalavalvb>> / 2) * sgn( i(Vlvregurgitation) ) '
 .elseif (lvregurgitationvalveratio > 0)
 Vlvregurgitation  lv          lvregurp1   dc 0
 Blvregurgitation  lvregurp1   lvregurp2   V=' <<lalavalvk>> / lvregurgitationvalveratio * ( i(Vlvregurgitation) ^2 )^( <<lalavalvb>> / 2) * sgn( i(Vlvregurgitation) ) '
@@ -147,11 +151,27 @@ Vlvregurgitation   lv          lvregurp1   dc 0
 Vlvregurgitation2  lavalvp1    lvregurp2   dc 0
 .endif
 
+.if (aaregurgitation > 0)
+Vaaregurgitation  lvvalv      aaregurp1   dc 0
+Baaregurgitation  aaregurp1   aaregurp2   V=' aaregurgitation * ( i(Vaaregurgitation) ^2 )^( <<lvlvvalvb>> / 2) * sgn( i(Vaaregurgitation) ) '
+.elseif (aaregurgitationvalveratio > 0)
+Vaaregurgitation  lvvalv      aaregurp1   dc 0
+Baaregurgitation  aaregurp1   aaregurp2   V=' <<lvlvvalvk>> / aaregurgitationvalveratio * ( i(Vaaregurgitation) ^2 )^( <<lvlvvalvb>> / 2) * sgn( i(Vaaregurgitation) ) '
+.if (switchvalve==0)
+aaaregurgitation  aaregurp2   lv    valve
+.else
+Xaaregurgitation  aaregurp2   lv  lvvalv   swdiode
+.endif
+.else
+Vaaregurgitation   lvvalv      aaregurp1   dc 0
+Vaaregurgitation2  lv          aaregurp2   dc 0
+.endif
+
 
 
 .if (rvregurgitation > 0)
-Rrvregurgitation rv         rvregurp1     r = rvregurgitation
-Vrvregurgitation rvregurp1  ravalvp1      dc 0
+Vrvregurgitation  rv          rvregurp1   dc 0
+Brvregurgitation  rvregurp1   rvregurp2   V=' rvregurgitation * ( i(Vrvregurgitation) ^2 )^( <<raravalvb>> / 2) * sgn( i(Vrvregurgitation) ) '
 .elseif (rvregurgitationvalveratio > 0)
 Vrvregurgitation  rv          rvregurp1   dc 0
 Brvregurgitation  rvregurp1   rvregurp2   V=' <<raravalvk>> / rvregurgitationvalveratio * ( i(Vrvregurgitation) ^2 )^( <<raravalvb>> / 2) * sgn( i(Vrvregurgitation) ) '
@@ -163,6 +183,23 @@ Xrvregurgitation  rvregurp2   ravalvp1  rv  swdiode
 .else
 Vrvregurgitation  rv          rvregurp1     dc 0
 Vrvregurgitation2 ravalvp1    rvregurp2     dc 0
+.endif
+
+
+.if (pa1regurgitation > 0)
+Vpa1regurgitation  rvvalv       pa1regurp1   dc 0
+Bpa1regurgitation  pa1regurp1   pa1regurp2   V=' pa1regurgitation * ( i(Vpa1regurgitation) ^2 )^( <<rvrvvalvb>> / 2) * sgn( i(Vpa1regurgitation) ) '
+.elseif (pa1regurgitationvalveratio > 0)
+Vpa1regurgitation  rvvalv       pa1regurp1   dc 0
+Bpa1regurgitation  pa1regurp1   pa1regurp2   V=' <<rvrvvalvk>> / pa1regurgitationvalveratio * ( i(Vpa1regurgitation) ^2 )^( <<rvrvvalvb>> / 2) * sgn( i(Vpa1regurgitation) ) '
+.if (switchvalve==0)
+apa1regurgitation  pa1regurp2   ravalvp1    valve
+.else
+Xpa1regurgitation  pa1regurp2   rv   rvvalv  swdiode
+.endif
+.else
+Vpa1regurgitation  rvvalv   pa1regurp1     dc 0
+Vpa1regurgitation2 rv       pa1regurp2     dc 0
 .endif
 
 

@@ -15,6 +15,8 @@ History:
   Author: w.x.chan@gmail.com         03Sep2021           - v3.5.1
                                                               -added stepTime, in micro seconds
                                                               - added switchvalve
+  Author: w.x.chan@gmail.com         29Sep2021           - v3.6.0
+                                                              -added aortic and pulmonary valve regurgitation
 '''
 ########################################################################
 _version='3.5.1'
@@ -77,11 +79,12 @@ def createLVcircuit(casename,paramDict,stepTime=10,skipVariableList=None,verbose
             if side+tempstr not in skipVariableList:
                 cmd = "sed -i.bak s/'<<"+side+tempstr+">>'/'" + '{:10.6f}'.format(paramDict[side+tempstr]) + "'/g " + cirfilename
                 os.system(cmd)
-        if side+"vregurger" not in skipVariableList:
-            cmd = "sed -i.bak s/'<<"+side+"vregurger>>'/'" + str(paramDict[side+"vregurger"]) + "'/g " + cirfilename
+    for valve in ['lv','rv','aa','pa1']:
+        if valve+"regurger" not in skipVariableList:
+            cmd = "sed -i.bak s/'<<"+valve+"regurger>>'/'" + str(paramDict[valve+"regurger"]) + "'/g " + cirfilename
             os.system(cmd)
-        if side+"vregurgevalveratio" not in skipVariableList:
-            cmd = "sed -i.bak s/'<<"+side+"vregurgevalveratio>>'/'" + str(paramDict[side+"vregurgevalveratio"]) + "'/g " + cirfilename
+        if valve+"regurgevalveratio" not in skipVariableList:
+            cmd = "sed -i.bak s/'<<"+valve+"regurgevalveratio>>'/'" + str(paramDict[valve+"regurgevalveratio"]) + "'/g " + cirfilename
             os.system(cmd)
     if "switchvalve" not in skipVariableList:
         cmd = "sed -i.bak s/'<<switchvalve>>'/'" + str(paramDict["switchvalve"])+ "'/g " + cirfilename
