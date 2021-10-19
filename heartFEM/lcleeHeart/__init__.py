@@ -42,9 +42,12 @@ History:
                                                             -removed outOfplaneDeg and added fiberSheetletAngle,fiberSheetletWidth,radialFiberAngle,fiberLength for meshing
                                                             -added fiberSheetletAngle,fiberSheetletWidth,radialFiberAngle,fiberLength for changeFiberAngles
   Author: w.x.chan@gmail.com         28JUL2021           - v3.4.3
-                                                            - added strainEnergy in ulforms 
+                                                            - added strainEnergy in ulforms "StrainEnergyDensityFunction_Coef"
+  Author: w.x.chan@gmail.com         05OCT2021           - v3.6.0
+                                                            - added  "StrainEnergyDensityFunction_Coef"
+                                                            - added trackphase and updatephase
 '''
-_version='3.4.3'
+_version='3.6.0'
 
 import sys
 
@@ -316,8 +319,9 @@ def changeFiberAngles(casePath,meshname,endo_angle,epi_angle,fiberSheetletAngle=
 class heart:
     def __new__(cls, *args, **kwargs):
         return super().__new__(cls)
-    def __init__(self,casename,meshname,runParameters,PVinput='volume',inverseHeart=False):
+    def __init__(self,casename,meshname,runParameters,PVinput='volume',inverseHeart=False,trackphase=False):
         self.inverseHeart=inverseHeart
+        self.trackphase=trackphase
         self.backup=(casename,meshname,dict(runParameters),PVinput)
         runParameters=dict(runParameters)
         parameters["form_compiler"]["quadrature_degree"]=4
@@ -418,12 +422,20 @@ class heart:
         W = FunctionSpace(self.mesh, Mixelem)
         self.invFspace=FunctionSpace(self.mesh, Telem3)
         self.displacementSpace=FunctionSpace(self.mesh, Velem)
+        self.phaseSpace=FunctionSpace(self.mesh, Qelem)
+        self.dphaseSpace=FunctionSpace(self.mesh, Qelem)
+        self.trSpace=FunctionSpace(self.mesh, Qelem)
+        self.tr_prevSpace=FunctionSpace(self.mesh, Qelem)
         Quad = FunctionSpace(self.mesh, Quadelem)
         
         bctop = DirichletBC(W.sub(0).sub(2), Expression(("0.0"), degree = 4), self.facetboundaries, topid)
         bcs = [bctop]
         self.invF= Function(self.invFspace)
         self.invF_prev= Function(self.invFspace)
+        self.phase= Function(self.phaseSpace)
+        self.dphase= Function(self.dphaseSpace)
+        self.tr= Function(self.trSpace)
+        self.tr_prev= Function(self.tr_prevSpace)
         self.w = Function(W)
         dw = TrialFunction(W)
         wtest = TestFunction(W)
@@ -461,6 +473,7 @@ class heart:
                  "sheet": self.s0,
                  "sheet-normal": self.n0,
                  "invF_variable":self.invF,
+                 "StrainEnergyDensityFunction_Coef":runParameters["StrainEnergyDensityFunction_Coef"],
                  "StrainEnergyDensityFunction_Cff":runParameters["StrainEnergyDensityFunction_Cff"],
                  "StrainEnergyDensityFunction_Css":runParameters["StrainEnergyDensityFunction_Css"],
                  "StrainEnergyDensityFunction_Cnn":runParameters["StrainEnergyDensityFunction_Cnn"],
@@ -473,6 +486,10 @@ class heart:
                         "facet_normal": N,
                         "displacement_variable": self.u, 
                         "pressure_variable": self.p,
+                        "relaxphase":self.phase,
+                        "drelaxphase":self.dphase,
+                        "tr": self.tr,
+                        "prev_tr": self.tr_prev,
                         "fiber": self.f0,
                         "sheet": self.s0,
                         "sheet-normal": self.n0,
@@ -483,7 +500,7 @@ class heart:
         
          
         self.uflforms = Forms(params)
-        self.activeforms = Active(activeparams)
+        self.activeforms = Active(activeparams,trackphase=self.trackphase)
         self.activeforms.set_default_parameters(runParameters)
         
         self.Fmat = self.uflforms.Fmat()
@@ -554,6 +571,16 @@ class heart:
         self.solver= NSolver(solverparams)
         self.mesh_volume = assemble(Constant(1.0)*dx)
         return
+    def updatePhase(self):
+        self.phase.vector()[:]=self.phase.vector()[:]+self.dphase.vector()[:]
+        for n in range(len(self.phase.vector()[:])):
+            if self.dphase.vector()[n]<0:
+                self.phase.vector()[n]=0
+            elif (self.phase.vector()[n]+self.dphase.vector()[n])>np.pi:
+                self.phase.vector()[n]=np.pi
+            else:
+                self.phase.vector()[n]=self.phase.vector()[n]+self.dphase.vector()[n]
+        self.tr_prev.vector()[:]=self.tr.vector()[:].copy()
     def copy(self):
         return heart(*self.backup)
     

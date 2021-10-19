@@ -93,6 +93,7 @@ class Forms(object):
 		n0 = self.parameters["sheet-normal"]
 		p = self.parameters["pressure_variable"]
         
+		Cstrain=self.parameters["StrainEnergyDensityFunction_Coef"]
 		Cff=self.parameters["StrainEnergyDensityFunction_Cff"]
 		Css=self.parameters["StrainEnergyDensityFunction_Css"]
 		Cnn=self.parameters["StrainEnergyDensityFunction_Cnn"]
@@ -123,7 +124,7 @@ class Forms(object):
 		    #QQ_inv = 29.9*pow(V0*Eff_inv,2.0) + 13.3*(pow(V0*Ess_inv,2.0)+ pow(V0*Enn_inv,2.0)+ 2.0*pow(V0*Ens_inv,2.0)) + 26.6*(2.0*pow(V0*Efs_inv,2.0) + 2.0*pow(V0*Efn_inv,2.0))
 		    Wp=[Eff_inv,Ess_inv,Enn_inv,Efs_inv,Efn_inv,Ens_inv] #inverse
 		else:
-		    Wp =(100*(exp(QQ) -  1.0) - p*(self.J() - 1.0))*dx(self.parameters["mesh"]) #original
+		    Wp =(Cstrain*(exp(QQ) -  1.0) - p*(self.J() - 1.0))*dx(self.parameters["mesh"]) #original
 		return Wp
 
 	def strainEnergy(self, integrate=False):
@@ -133,6 +134,7 @@ class Forms(object):
 	    n0 = self.parameters["sheet-normal"]
 	    p = self.parameters["pressure_variable"]
         
+	    Cstrain=self.parameters["StrainEnergyDensityFunction_Coef"]
 	    Cff=self.parameters["StrainEnergyDensityFunction_Cff"]
 	    Css=self.parameters["StrainEnergyDensityFunction_Css"]
 	    Cnn=self.parameters["StrainEnergyDensityFunction_Cnn"]
@@ -151,9 +153,9 @@ class Forms(object):
 	    QQ = Cff*pow(Eff,2.0) + Css*pow(Ess,2.0)+ Cnn*pow(Enn,2.0)+ Cns*pow(Ens,2.0) + Cfs*pow(Efs,2.0) + Cfn*pow(Efn,2.0) #Original
 	    if integrate:
 		    Wp = 0.0 
-		    Wp = assemble((100*(exp(QQ) -  1.0))*dx(self.parameters["mesh"]),form_compiler_parameters={"representation":"uflacs"})
+		    Wp = assemble((Cstrain*(exp(QQ) -  1.0))*dx(self.parameters["mesh"]),form_compiler_parameters={"representation":"uflacs"})
 	    else:
-		    Wp = 100*(exp(QQ) -  1.0)
+		    Wp = Cstrain*(exp(QQ) -  1.0)
 	    return Wp
 
 	def EmatECC(self):
@@ -216,7 +218,7 @@ class Forms(object):
 	  
 		p = self.parameters["pressure_variable"]
 
-		C = 200 #self.parameters["C_param"]
+		Cstrain=self.parameters["StrainEnergyDensityFunction_Coef"]
 
 		F = dolfin.variable(F)
 		J = det(F)
@@ -234,7 +236,7 @@ class Forms(object):
 		
 		#QQ = bff*pow(Eff,2.0) + bfx*(pow(Ess,2.0)+ pow(Enn,2.0)+ 2.0*pow(Ens,2.0)) + bxx*(2.0*pow(Efs,2.0) + 2.0*pow(Efn,2.0))
 		QQ = bff*Eff**2.0 + bfx*(Ess**2.0 + Enn**2.0 + 2.0*Ens**2.0) + bxx*(2.0*Efs**2.0 + 2.0*Efn**2.0)
-		Wp = C/2.0*(exp(QQ) -  1.0) - p*(J - 1.0)
+		Wp = Cstrain*(exp(QQ) -  1.0) - p*(J - 1.0)
 		#E = dolfin.variable(Ea)
 		sigma =  (1.0/J)*dolfin.diff(Wp,F)*F.T
 

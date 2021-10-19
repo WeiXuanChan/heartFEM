@@ -7,9 +7,10 @@ import math
 
 class SimpleActiveMaterial(object):
 
-    def __init__(self, params):
+    def __init__(self, params,trackphase=False):
         self.parameters = params
         self.default_parameters={"Ca0":4.35,"Ca0max":4.35,"B":4.75,"t0" : 200.5,"l0" : 1.58,"lr" : 1.85,"m" : 1048*0.5,	"b" : -1600*0.5}
+        self.trackphase=trackphase
     def Fmat(self):
         u = self.parameters["displacement_variable"]
         d = u.geometric_dimension()
@@ -84,6 +85,8 @@ class SimpleActiveMaterial(object):
         t_a = self.parameters["t_a"]
         lr = self.default_parameters["lr"]
         
+        
+        
         Cmat = F.T*F
         lmbda = sqrt(dot(f0, Cmat*f0))
         ls = lmbda*lr
@@ -92,8 +95,24 @@ class SimpleActiveMaterial(object):
         xp1 = conditional(lt(t_a,t0), 1.0, 0.0)
         w1 = xp1*pi*t_a/t0
         xp2 = conditional(le(t0,t_a), 1.0, 0.0)
-        xp3 = conditional(lt(t_a,t0+tr), 1.0, 0.0)
-        w2 = xp2*xp3*pi*(t_a - t0 + tr)/tr
+        
+        if self.trackphase:
+            tr_prev = self.parameters["prev_tr"]
+            dt=self.parameters["dt"]
+            phase=self.parameters["relaxphase"]
+            dphase=self.parameters["drelaxphase"]
+            dt_temp= conditional(le(t_a-dt,t0), t_a-t0, dt)
+            storedphase=conditional(le(t0,t_a),dt_temp/(tr_prev*0.5*dt_temp/dt+0.5*(1.0-dt_temp/dt)*tr)*pi, -1.0)
+            xp3 = conditional(le(storedphase,t0*0.0+pi), 1.0, 0.0)
+            w2 = xp2*xp3*storedphase
+            
+            S = FunctionSpace(self.parameters["mesh"], "CG", 1)
+                
+            self.parameters["tr"].vector()[:]=project(tr,S).vector()[:]
+            self.parameters["drelaxphase"].vector()[:]=project(storedphase,S).vector()[:]
+        else:
+            xp3 = conditional(lt(t_a,t0+tr), 1.0, 0.0)
+            w2 = xp2*xp3*pi*(t_a - t0 + tr)/tr
         
         Ct = 0.5*(1 - cos(w1+w2))
         
