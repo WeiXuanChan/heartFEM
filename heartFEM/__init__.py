@@ -118,8 +118,15 @@ History:
                                                             -ngspice_py v3.5.0
                                                             -heartParameters v3.5.0
                                                             -lcleeHeart v3.4.2
+  Author: w.x.chan@gmail.com         05Oct2021           - v3.6.0
+                                                            -added set_EVP_with_LA_systolic_volume
+                                                            -added optimiseStiffness
+                                                            -added trackphase for iterativeRun
+                                                            -ngspice_py v3.5.0
+                                                            -heartParameters v3.6.0
+                                                            -lcleeHeart v3.6.0
 '''
-_version='3.5.1'
+_version='3.6.0'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
@@ -361,6 +368,11 @@ class LVclosed:
             for key in self.defaultParameters:
                 if key in editParameters:
                     self.defaultParameters[key]=editParameters[key]
+    def set_EVP_with_LA_min_volume(self,LAminVol):
+        ageInWeeks=float(self.LVage[5:])
+        LA_unloadedVolume=self.defaultParameters.getFetalPopulation_LA_unloadedVolume(ageInWeeks)
+        self.defaultParameters['EDP_LV']=(LAminVol-LA_unloadedVolume)/self.defaultParameters['lac']
+        logger.info('with age'+repr(ageInWeeks)+' ,set EDP as '+repr(self.defaultParameters['EDP_LV'])+' mmHg')
     def getLongAxis(self):#not general, more accurate is long axis is longer, wrong result if spherical
         meshfilename = self.casename+ '/'+self.meshname+ '.stl'
         pdata = lcleeHeart.readSTL(meshfilename)
@@ -1249,19 +1261,12 @@ class LVclosed:
             temp=line.split(sep=' , ')
             runParameters[temp[0]]=self.decodeStringValue(temp[1])
         return runParameters
-    def getLastcycleCircuitResults(self,BCL):
-        cir_results=np.loadtxt(self.casename+"/"+str(self.runCount)+'/'+'circuit_results.txt',skiprows=1)
-        with open(self.casename+"/"+str(self.runCount)+'/'+'circuit_results.txt','r') as f:
-            cir_results_header=f.readline()
-        if cir_results_header[-1]=='\n':
-            cir_results_header=cir_results_header[:-1]
-        cir_results_header=cir_results_header[1:]
-        cir_results[:,0]*=1000. #set to ms
-        while cir_results[-1,0]>=(2.*BCL):
-            cir_results[:,0]-=BCL
-        cir_results=cir_results[cir_results[:,0]>=0]
-        cir_results=cir_results[cir_results[:,0]<BCL]
-        np.savetxt(self.casename+"/"+str(self.runCount)+'/'+'circuit_results_lastcycle.txt',cir_results,header=cir_results_header,comments='#')
+    def getLastcycleCircuitResults(self,BCL,path=None,filename=None):
+        if filename is None:
+            filename='circuit_results'
+        if path is None:
+            path=self.casename+"/"+str(self.runCount)
+        ngspice_py.getLastcycleCircuitResults(BCL,path,filename)
         return
     def __call__(self,editParameters=None,**kwargs):
         if self.defaultRun_kwargs is None:
@@ -1449,7 +1454,7 @@ class LVclosed:
         ngspice_py.simLVcircuit_align_EDvol_and_EStime(self.casename+"/"+str(self.runCount)+'/'+meshname,runParameters['BCL']*runCycles,self.casename+"/"+str(self.runCount)+'/'+meshname+'_lvcirtable.txt',runParameters['BCL'],runParameters['ES_time'],runParameters['t0'],lvinputvar='table2dtrackrelaxphase',initLVvol=runParameters['EDV_LV'],vla0=runParameters['vla0'],vra0=runParameters['vra0'])
         self.getLastcycleCircuitResults(runParameters['BCL'])
         return runParameters
-    def iterativeRun(self,editParameters=None,runTimeList=None,endTime=None,manualPhaseTimeInput=False,unloadGeo=False,setHeart=None,outputResultList=None,tryPressureRatio=0.2):
+    def iterativeRun(self,editParameters=None,runTimeList=None,endTime=None,manualPhaseTimeInput=False,unloadGeo=True,setHeart=None,outputResultList=None,tryPressureRatio=0.2,trackphase=False):
         '''
         setHeart: list or lcleeHeart object: list [folder name, meshname]
         '''
@@ -1461,7 +1466,10 @@ class LVclosed:
         else:
             editParameters={}
         self.writeRunParameters(self.casename+"/"+str(self.runCount),runParameters)
-        
+        if runTimeList is not None or manualPhaseTimeInput:
+            if trackphase:
+                logger.warning("trackphase is not compatible with runTimeList set or manualPhaseTimeInput, turning trackphase off")
+                trackphase=False
         if setHeart is None:
             if min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
                 self.generateMesh(Laxis=np.array([runParameters['Laxis_X'],runParameters['Laxis_Y'],runParameters['Laxis_Z']]),endo_angle=runParameters['endo_angle'],epi_angle=runParameters['epi_angle'],fiberSheetletAngle=runParameters['fiberSheetletAngle'],fiberSheetletWidth=runParameters['fiberSheetletWidth'],radialFiberAngle=runParameters['radialFiberAngle'],fiberLength=runParameters['lr'],clipratio=runParameters['clip_ratio'],toRunCountFolder=True)
@@ -1506,22 +1514,22 @@ class LVclosed:
         
         if setHeart is not None:
             if isinstance(setHeart,list):
-                heart=lcleeHeart.heart(setHeart[0],setHeart[1],runParameters)
+                heart=lcleeHeart.heart(setHeart[0],setHeart[1],runParameters,trackphase=trackphase)
             else:
                 heart=setHeart
             
-        elif runParameters['EDP_LV'] is None:
+        elif runParameters['EDP_LV'] is None and not(unloadGeo):
             if min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
-                heart=lcleeHeart.heart(self.casename+'/'+str(self.runCount),self.meshname,runParameters)
+                heart=lcleeHeart.heart(self.casename+'/'+str(self.runCount),self.meshname,runParameters,trackphase=trackphase)
             else:
-                heart=lcleeHeart.heart(self.casename,self.meshname,runParameters)
+                heart=lcleeHeart.heart(self.casename,self.meshname,runParameters,trackphase=trackphase)
         else:
             if min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
         	    self.getUnloadedGeometry(editParameters=runParameters,casename=self.casename+'/'+str(self.runCount),targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],savename=self.meshname+'_unloadedmesh',tryPressureRatio=tryPressureRatio)
-        	    heart=lcleeHeart.heart(self.casename+'/'+str(self.runCount),self.meshname+'_unloadedmesh',runParameters)
+        	    heart=lcleeHeart.heart(self.casename+'/'+str(self.runCount),self.meshname+'_unloadedmesh',runParameters,trackphase=trackphase)
             else:
         	    self.getUnloadedGeometry(editParameters=runParameters,savename=self.meshname+'_unloadedmesh',targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],toRunCountFolder=True,tryPressureRatio=tryPressureRatio)
-        	    heart=lcleeHeart.heart(self.casename,self.meshname+'_unloadedmesh',runParameters)
+        	    heart=lcleeHeart.heart(self.casename,self.meshname+'_unloadedmesh',runParameters,trackphase=trackphase)
         heart.dt.dt = 1.
         if manualPhaseTimeInput and self.manualPhaseTime is not None:
             if runTimeList is None:
@@ -1577,6 +1585,9 @@ class LVclosed:
         	#################################################################
         	p_cav = heart.uflforms.cavitypressure()
         	V_cav = heart.uflforms.cavityvol()
+            
+        	
+                
         	if runTimeList is None:
         		tstep = tstep + dt
         	elif len(runTimeList)<=0:
@@ -1588,7 +1599,19 @@ class LVclosed:
         	cycle = math.floor(tstep/BCL)
         	logger.info("cycle="+repr(cycle))
         	t = tstep - cycle*BCL
-        	
+        	#these lines added as between the two timesteps if there is a large volume it will crash, therefore below increases volume gradually
+        	if manualPhaseTimeInput and self.manualPhaseTime is not None:
+        		t2=self.manualPhaseTime(t)
+        		heart.t_a.t_a=t2
+        		if(t2 >= 0.0 and t2 < 4.0):
+        			heart.dt.dt = 0.50
+        		elif (t2 >= (runParameters['t0']-0.5) and t2 < (runParameters['t0']+0.5)):
+        			heart.dt.dt = 3
+        		else :
+        			heart.dt.dt = 1.0
+        	else:
+        		heart.dt.dt=dt#runTimeList[0]-t
+        		heart.t_a.t_a=t   
         	if(t >= 0.0 and t < 4.0):
         		dt = 0.50
         	elif (t >= (runParameters['t0']-0.5) and t < (runParameters['t0']+0.5)):
@@ -1611,19 +1634,7 @@ class LVclosed:
         	LVcav_array.append(V_cav)
         	Pcav_array.append(p_cav*0.0075)
             
-            #these lines added as between the two timesteps if there is a large volume it will crash, therefore below increases volume gradually
-        	if manualPhaseTimeInput and self.manualPhaseTime is not None:
-        		t2=self.manualPhaseTime(t)
-        		heart.t_a.t_a=t2
-        		if(t2 >= 0.0 and t2 < 4.0):
-        			heart.dt.dt = 0.50
-        		elif (t2 >= (runParameters['t0']-0.5) and t2 < (runParameters['t0']+0.5)):
-        			heart.dt.dt = 3
-        		else :
-        			heart.dt.dt = 1.0
-        	else:
-        		heart.dt.dt=dt#runTimeList[0]-t
-        		heart.t_a.t_a=t   
+            
         	self.solveVolume(heart,V_cav)
         	#self.solveTa(heart,t,peaktime=runParameters['t0'])
             
@@ -1661,17 +1672,24 @@ class LVclosed:
         		print (fdata_stress, tstep, sigma_fiber_LV, file=fdata_stress )
         		print(tstep, heart.uflforms.strainEnergy(integrate=True) , file=fdataWork)
         	#Joy changed Till here          
+            
+        	if trackphase:
+        	    heart.updatePhase()
         
         if(fenics.MPI.rank(heart.comm) == 0):
         	fdataPV.close()
         
         if (tstep >= runParameters['BCL']):
         	t_array=np.array(t_array)
-        	temp_Ind=np.nonzero((t_array[2:]-t_array[:-2])>0)[0][-1]
-        	temp_ind=np.nonzero(np.logical_and(t_array[:temp_Ind]>t_array[temp_Ind],t_array[:temp_Ind]<t_array[temp_Ind+2]))[0][-1]
-
-        	LVcav_arrayT=LVcav_array[(temp_ind-1):]
-        	Pcav_arrayT=Pcav_array[(temp_ind-1):]
+        	if (tstep >= 2*runParameters['BCL']):
+        		temp_Ind=np.nonzero((t_array[2:]-t_array[:-2])>0)[0][-1]
+        		temp_ind=np.nonzero(np.logical_and(t_array[:temp_Ind]>t_array[temp_Ind],t_array[:temp_Ind]<t_array[temp_Ind+2]))[0][-1]
+    
+        		LVcav_arrayT=LVcav_array[(temp_ind-1):]
+        		Pcav_arrayT=Pcav_array[(temp_ind-1):]
+        	else:
+        		LVcav_arrayT=LVcav_array
+        		Pcav_arrayT=Pcav_array
         	plt.plot(LVcav_arrayT, Pcav_arrayT)
         	plt.xlabel("Volume")
         	plt.ylabel("Pressure")
@@ -1821,21 +1839,23 @@ def plotLVBehavior(mainPath,labelList=None,timeSlice=None,volumeSlice=None,fmt='
     VolTime_total=[]
     timeSpace=[]
     volumeSpace=[]
+    VolTime_base=[]
+    VolTime=[]
     for n in range(len(mainPath)):
         timeSpace.append(np.loadtxt(mainPath[n]+'_Press_timeSpace.txt'))
         volumeSpace.append(np.loadtxt(mainPath[n]+'_Press_volumeSpace.txt'))
-        VolTime_base=np.loadtxt(mainPath[n]+'_Press_VolTime_base.txt')
-        VolTime=np.loadtxt(mainPath[n]+'_Press_VolTime.txt')
+        VolTime_base.append(np.loadtxt(mainPath[n]+'_Press_VolTime_base.txt'))
+        VolTime.append(np.loadtxt(mainPath[n]+'_Press_VolTime.txt'))
         
-        remove_volumeSpace=int(len(volumeSpace)*removeVolumeratio)
-        remove_timeSpace=int(len(timeSpace)*0.5)
+        remove_volumeSpace=int(len(volumeSpace[-1])*removeVolumeratio)
+        remove_timeSpace=int(len(timeSpace[-1])*0.5)
         volumeSpace[-1]=volumeSpace[-1][remove_volumeSpace:-remove_volumeSpace]
-        VolTime_base=VolTime_base[remove_volumeSpace:-remove_volumeSpace]
-        VolTime=VolTime[remove_volumeSpace:-remove_volumeSpace]
+        VolTime_base[-1]=VolTime_base[-1][remove_volumeSpace:-remove_volumeSpace]
+        VolTime[-1]=VolTime[-1][remove_volumeSpace:-remove_volumeSpace]
         timeSpace[-1]=timeSpace[-1][:-remove_timeSpace]
-        VolTime=VolTime[:,:-remove_timeSpace]
+        VolTime[-1]=VolTime[-1][:,:-remove_timeSpace]
         
-        VolTime_total.append(VolTime_base.reshape((-1,1))+VolTime)
+        VolTime_total.append(VolTime_base[-1].reshape((-1,1))+VolTime[-1])
     import matplotlib.pyplot as plt
     from matplotlib import cm
     import matplotlib.ticker as mticker
@@ -1875,30 +1895,63 @@ def plotLVBehavior(mainPath,labelList=None,timeSlice=None,volumeSlice=None,fmt='
             ax.legend(loc=0)
         plt.savefig(mainPath[0]+'_LVBehaviorPlot_volume_{0:.1f}mL.png'.format(volumeSlice),dpi=fig.dpi,format=fmt,bbox_inches='tight')
         fig.clf()
-    
-    fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-    X, Y = np.meshgrid(timeSpace, volumeSpace)
-    
-    # Customize the z axis.
-    vmax=VolTime_total.max()
-    vmin=VolTime_total.min()
-    surf = ax.plot_surface(X, Y, VolTime_total,cmap=cm.coolwarm,linewidth=0, antialiased=False)
-
-    ax.zaxis.set_major_locator(mticker.LinearLocator(10))
-    ax.zaxis.set_major_formatter('{x:.01f}')
-    ax.set_zlim(vmin,vmax)
         
-    
-    # Add a color bar which maps values to colors.
-    fig.colorbar(surf, shrink=0.5, aspect=5)
-    ax.set_title('LV Behavior - Pressure (mmHg)')
-    ax.set_xlabel('Time (ms)')
-    ax.set_ylabel('Volume (mL)')
-    ax.set_zlabel('Pressure (mmHg)')
-    plt.savefig(mainPath[0]+'_LVBehaviorPlot.png',dpi=fig.dpi,format=fmt,bbox_inches='tight')
-    if show:
-        plt.show()
+    fig,ax=plt.subplots(1,1)
+    for m in range(len(mainPath)):
+        plt.plot(volumeSpace[m],VolTime_base[m],color=cList[m],label=mainPath[m])
+    ax.set_title('passive LV Behavior - Pressure (mmHg)')
+    ax.set_xlabel('Volume (mL)')
+    ax.set_ylabel('Passive Pressure (mmHg)')
+    if len(mainPath)>1:
+        ax.legend(loc=0)
+    plt.savefig(mainPath[0]+'_passiveLVBehaviorPlot.png'.format(volumeSlice),dpi=fig.dpi,format=fmt,bbox_inches='tight')
     fig.clf()
+    for m in range(len(mainPath)):
+        fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+        X, Y = np.meshgrid(timeSpace, volumeSpace)
+        
+        # Customize the z axis.
+        vmax=VolTime[m].max()
+        vmin=VolTime[m].min()
+        surf = ax.plot_surface(X, Y, VolTime[m],cmap=cm.coolwarm,linewidth=0, antialiased=False)
+    
+        ax.zaxis.set_major_locator(mticker.LinearLocator(10))
+        ax.zaxis.set_major_formatter('{x:.01f}')
+        ax.set_zlim(vmin,vmax)
+            
+        
+        # Add a color bar which maps values to colors.
+        fig.colorbar(surf, shrink=0.5, aspect=5)
+        ax.set_title('active LV Behavior - Pressure (mmHg)')
+        ax.set_xlabel('Time (ms)')
+        ax.set_ylabel('Volume (mL)')
+        ax.set_zlabel('Pressure (mmHg)')
+        plt.savefig(mainPath[0]+'_activeLVBehaviorPlot.png',dpi=fig.dpi,format=fmt,bbox_inches='tight')
+        fig.clf()
+        
+        fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+        X, Y = np.meshgrid(timeSpace, volumeSpace)
+        
+        # Customize the z axis.
+        vmax=VolTime_total[m].max()
+        vmin=VolTime_total[m].min()
+        surf = ax.plot_surface(X, Y, VolTime_total[m],cmap=cm.coolwarm,linewidth=0, antialiased=False)
+    
+        ax.zaxis.set_major_locator(mticker.LinearLocator(10))
+        ax.zaxis.set_major_formatter('{x:.01f}')
+        ax.set_zlim(vmin,vmax)
+            
+        
+        # Add a color bar which maps values to colors.
+        fig.colorbar(surf, shrink=0.5, aspect=5)
+        ax.set_title('LV Behavior - Pressure (mmHg)')
+        ax.set_xlabel('Time (ms)')
+        ax.set_ylabel('Volume (mL)')
+        ax.set_zlabel('Pressure (mmHg)')
+        plt.savefig(mainPath[0]+'_LVBehaviorPlot.png',dpi=fig.dpi,format=fmt,bbox_inches='tight')
+        if show:
+            plt.show()
+        fig.clf()
 
 def exactFunc(x,inverse=None):
     return x
@@ -2149,7 +2202,7 @@ class cost_function:
             cycletime=valueArray[:,0]%runParameters['BCL']
             diastolictimeInd=np.argmin(np.minimum(cycletime,runParameters['BCL']-cycletime))
             minval=np.min(valueArray[:,1])
-            maxval=valueArray[diastolictimeInd,1]#np.max(valueArray[:,1])
+            maxval=valueArray[diastolictimeInd,1]#np.max(valueArray[:,1])#
             ratio=1.#2.*(valueArray[diastolictimeInd,1]-minval)/(maxval-minval)-1
             return func(ratio*(maxval-minval),ref)
         elif varName=='pmax_LVLA':  
@@ -2278,6 +2331,61 @@ def optimiseEDP(LVclosed_object,maxLALV_pressure,folder=None,try_stlPressure=4.)
     
     cmd = "cp -r " + LVclosed_object.casename+'/'+folder+'/'+LVclosed_object.meshname+'* '+ LVclosed_object.casename+'/'+folder+'/best_fit'
     os.system(cmd)
+    cmd = "cp -r " + LVclosed_object.casename+'/'+LVclosed_object.runCount+'/* '+ LVclosed_object.casename+'/'+folder+'/best_fit'
+    os.system(cmd)
+def optimiseStiffness(LVclosed_object,LAtime_Vol,maxLALV_pressure,folder=None,relaxationPressureCorrection=1.,tryPressureRatio=0.5):
+    if folder is None:
+        folder='optimiseStiffness'
+    os.makedirs(LVclosed_object.casename+'/'+folder+'/best_fit',exist_ok=True)
+    
+    LAtime_Vol_spl=scipyinterpolate.splrep(LAtime_Vol[:,0], LAtime_Vol[:,1])
+    ageInWeeks=float(LVclosed_object.LVage[5:])
+    LA_unloadedVolume=LVclosed_object.defaultParameters.getFetalPopulation_LA_unloadedVolume(ageInWeeks)
+    
+    count=0
+    LVclosed_object.runCount=folder+'/'+str(count)
+    if not(os.path.isfile(LVclosed_object.casename+'/'+LVclosed_object.runCount+'/'+LVclosed_object.meshname+'_unloadedmesh.hdf5')):
+        LVclosed_object.unloadedGeometryRun(tryPressureRatio=tryPressureRatio)
+    LVclosed_object.iterativeRun(endTime=LVclosed_object.defaultParameters["BCL"],setHeart=[LVclosed_object.casename+'/'+LVclosed_object.runCount,LVclosed_object.meshname+'_unloadedmesh'],outputResultList=[],trackphase=True)
+    LV_tPV=np.loadtxt(LVclosed_object.casename+"/"+str(LVclosed_object.runCount)+"/PV_.txt")
+    LV_tPV[:,1]*=relaxationPressureCorrection
+    LA_Vol = scipyinterpolate.splev(LV_tPV[:,0], LAtime_Vol_spl)
+    LA_pressures=(LA_Vol-LA_unloadedVolume)/LVclosed_object.defaultParameters['lac']
+    
+    LALV_pressure=(LA_pressures-LV_tPV[:,1]).max()
+    with open(LVclosed_object.casename+'/'+LVclosed_object.runCount+"/runParameters.txt", "r") as f:
+         old = f.readlines() # read everything in the file
+    old.insert(0,"#current maxLALV pressure= "+repr(LALV_pressure)+"/"+repr(relaxationPressureCorrection)+" , target LALV pressure "+repr(maxLALV_pressure)+" \n")
+    with open(LVclosed_object.casename+'/'+LVclosed_object.runCount+"/runParameters.txt", "w") as f:
+         f.writelines(old)
+    tune=1.
+    if maxLALV_pressure>LALV_pressure:
+        relation=1
+    else:
+        relation=-1
+    try_strainCoef=LVclosed_object.defaultParameters["StrainEnergyDensityFunction_Coef"]
+    adj_strainCoef=try_strainCoef*0.1
+    while maxLALV_pressure*tune*relation>LALV_pressure*tune*relation:
+        if abs(maxLALV_pressure-LALV_pressure)<0.001:
+            break
+        try_strainCoef+=tune*adj_strainCoef
+        count+=1
+        LVclosed_object.defaultParameters["StrainEnergyDensityFunction_Coef"]=try_strainCoef
+        LVclosed_object.runCount=folder+'/'+str(count)
+        LVclosed_object.unloadedGeometryRun(tryPressureRatio=tryPressureRatio)
+        LVclosed_object.iterativeRun(endTime=LVclosed_object.defaultParameters["BCL"],setHeart=[LVclosed_object.casename+'/'+LVclosed_object.runCount,LVclosed_object.meshname+'_unloadedmesh'],outputResultList=[],trackphase=True)
+        LV_tPV=np.loadtxt(LVclosed_object.casename+"/"+str(LVclosed_object.runCount)+"/PV_.txt")
+        LV_tPV[:,1]*=relaxationPressureCorrection
+        LALV_pressure=(LA_pressures-LV_tPV[:,1]).max()
+        with open(LVclosed_object.casename+'/'+LVclosed_object.runCount+"/runParameters.txt", "r") as f:
+             old = f.readlines() # read everything in the file
+        old.insert(0,"#current maxLALV pressure= "+repr(LALV_pressure)+"/"+repr(relaxationPressureCorrection)+" , target LALV pressure "+repr(maxLALV_pressure)+" \n")
+        with open(LVclosed_object.casename+'/'+LVclosed_object.runCount+"/runParameters.txt", "w") as f:
+             f.writelines(old)
+        if maxLALV_pressure*tune*relation<LALV_pressure*tune*relation:
+            tune*=-1.
+            adj_strainCoef*=0.3
+    
     cmd = "cp -r " + LVclosed_object.casename+'/'+LVclosed_object.runCount+'/* '+ LVclosed_object.casename+'/'+folder+'/best_fit'
     os.system(cmd)
 def optimiseFiberAngle(LVclosed_object,optVarList=None,folder=None,tryPressureRatio=0.2):
@@ -2534,7 +2642,7 @@ def optimiseWinkesselParameters(LVclosed_object,strokeVolume,maxLVLApressureDiff
                 LVclosed_object.defaultParameters[optVarList[n]]=results[optVarList[n]]
             
 
-def optimiseAllWinkesselParameters(LVclosed_object,strokeVolume,maxLVLApressureDiff,maxLVLVVALVpressureDiff,Q_regurge_flowratio=0.1,folderToLVbehavior=None,runCycles=20):
+def optimiseAllWinkesselParameters(LVclosed_object,strokeVolume,maxLVLApressureDiff,maxLVLVVALVpressureDiff,Q_regurge_flowratio=0.1,iteration=2,folderToLVbehavior=None,runCycles=20):
     baseFolder='optimiseWinkesselParameters'
     folder='0'
     EDVol=LVclosed_object.defaultParameters['EDV_LV']
@@ -2548,33 +2656,42 @@ def optimiseAllWinkesselParameters(LVclosed_object,strokeVolume,maxLVLApressureD
     for startiter in range(1,10):
         if not(os.path.isfile(LVclosed_object.casename+'/'+baseFolder+'/'+str(startiter)+'/init_WindScale/best_fit/circuit_results_lastcycle.txt')):
             break
-    for n in range(startiter,max(10,startiter+2)):
+    for n in range(startiter,startiter+iteration):
+        if n == (startiter+iteration-1):
+            stopstep=3
+        else:
+            stopstep=2
         folder=str(n)
-        QLV_maxind=np.argmin(getCircuitResult(LVclosed_object.casename+'/'+baseFolder+'/'+str(n-1)+'/init_WindScale/best_fit','i(Vlvprobe)',last_cycle=True))
-        QLVLA=getCircuitResult(LVclosed_object.casename+'/'+baseFolder+'/'+str(n-1)+'/init_WindScale/best_fit','i(Vlvregurgitation)',last_cycle=True)[QLV_maxind]
-        QLVAA=getCircuitResult(LVclosed_object.casename+'/'+baseFolder+'/'+str(n-1)+'/init_WindScale/best_fit','i(Vlvlvvalv)',last_cycle=True)[QLV_maxind]
-        real_Qratio=QLVLA/(QLVLA+QLVAA)
-        
-        os.makedirs(LVclosed_object.casename+'/'+baseFolder+'/'+folder,exist_ok=True)
-        time=np.loadtxt(LVclosed_object.casename+'/'+baseFolder+'/'+str(n-1)+'/init_WindScale/best_fit/circuit_results_lastcycle.txt')[:,0]
-        Vol_LV=getCircuitResult(LVclosed_object.casename+'/'+baseFolder+'/'+str(n-1)+'/init_WindScale/best_fit','v(lvvol)',last_cycle=True)
-        while time[0]<0:
-            time=time[1:]
-            Vol_LV=Vol_LV[1:]
-        while time[-1]>LVclosed_object.defaultParameters['BCL']:
-            time=time[:-1]
-            Vol_LV=Vol_LV[:-1]
-        if time[0]>0:
-            time=np.concatenate(([0.],time))
-            Vol_LV=np.concatenate(([Vol_LV[0]],Vol_LV))
-        argmin=np.argmin(Vol_LV)
-        Vol_LV[:argmin]=(Vol_LV[:argmin]-Vol_LV[argmin])/(Vol_LV[0]-Vol_LV[argmin])*(EDVol-ESVol)+ESVol
-        Vol_LV[argmin:]=(Vol_LV[argmin:]-Vol_LV[argmin])/(Vol_LV[-1]-Vol_LV[argmin])*(EDVol-ESVol)+ESVol
-        if time[-1]<LVclosed_object.defaultParameters['BCL']:
-            time=np.concatenate((time,[LVclosed_object.defaultParameters['BCL']]))
-            Vol_LV=np.concatenate((Vol_LV,[EDVol]))
-        #Vol_LV=(Vol_LV-Vol_LV.min())/(Vol_LV[0]-Vol_LV.min())*(EDVol-ESVol)+ESVol
-        np.savetxt(LVclosed_object.casename+'/'+baseFolder+'/'+str(n)+'/volume.txt',np.array([time,Vol_LV]).T)
-        Q_regurge_flowratio=real_Qratio*0.7+Q_regurge_flowratio*0.3
-        LVclosed_object.setManualVolumeFile(LVclosed_object.casename+'/'+baseFolder+'/'+str(n)+'/volume.txt')
-        optimiseWinkesselParameters(LVclosed_object,strokeVolume,maxLVLApressureDiff,maxLVLVVALVpressureDiff,step=0,stopstep=2,Q_regurge_flowratio=Q_regurge_flowratio,optVarList=None,baseFolder=baseFolder,folder=folder,folderToLVbehavior=folderToLVbehavior,runCycles=runCycles)
+        if not(os.path.isfile(LVclosed_object.casename+'/'+baseFolder+'/'+folder+'/init_lvlvvalvk/best_fit/circuit_results_lastcycle.txt')):
+            QLV_maxind=np.argmin(getCircuitResult(LVclosed_object.casename+'/'+baseFolder+'/'+str(n-1)+'/init_WindScale/best_fit','i(Vlvprobe)',last_cycle=True))
+            QLVLA=getCircuitResult(LVclosed_object.casename+'/'+baseFolder+'/'+str(n-1)+'/init_WindScale/best_fit','i(Vlvregurgitation)',last_cycle=True)[QLV_maxind]
+            QLVAA=getCircuitResult(LVclosed_object.casename+'/'+baseFolder+'/'+str(n-1)+'/init_WindScale/best_fit','i(Vlvlvvalv)',last_cycle=True)[QLV_maxind]
+            real_Qratio=QLVLA/(QLVLA+QLVAA)
+            
+            os.makedirs(LVclosed_object.casename+'/'+baseFolder+'/'+folder,exist_ok=True)
+            time=np.loadtxt(LVclosed_object.casename+'/'+baseFolder+'/'+str(n-1)+'/init_WindScale/best_fit/circuit_results_lastcycle.txt')[:,0]
+            Vol_LV=getCircuitResult(LVclosed_object.casename+'/'+baseFolder+'/'+str(n-1)+'/init_WindScale/best_fit','v(lvvol)',last_cycle=True)
+            while time[0]<0:
+                time=time[1:]
+                Vol_LV=Vol_LV[1:]
+            while time[-1]>LVclosed_object.defaultParameters['BCL']:
+                time=time[:-1]
+                Vol_LV=Vol_LV[:-1]
+            if time[0]>0:
+                time=np.concatenate(([0.],time))
+                Vol_LV=np.concatenate(([Vol_LV[0]],Vol_LV))
+            argmin=np.argmin(Vol_LV)
+            Vol_LV[:argmin]=(Vol_LV[:argmin]-Vol_LV[argmin])/(Vol_LV[0]-Vol_LV[argmin])*(EDVol-ESVol)+ESVol
+            Vol_LV[argmin:]=(Vol_LV[argmin:]-Vol_LV[argmin])/(Vol_LV[-1]-Vol_LV[argmin])*(EDVol-ESVol)+ESVol
+            if time[-1]<LVclosed_object.defaultParameters['BCL']:
+                time=np.concatenate((time,[LVclosed_object.defaultParameters['BCL']]))
+                Vol_LV=np.concatenate((Vol_LV,[EDVol]))
+            #Vol_LV=(Vol_LV-Vol_LV.min())/(Vol_LV[0]-Vol_LV.min())*(EDVol-ESVol)+ESVol
+            np.savetxt(LVclosed_object.casename+'/'+baseFolder+'/'+str(n)+'/volume.txt',np.array([time,Vol_LV]).T)
+            Q_regurge_flowratio=real_Qratio*0.7+Q_regurge_flowratio*0.3
+            LVclosed_object.setManualVolumeFile(LVclosed_object.casename+'/'+baseFolder+'/'+str(n)+'/volume.txt')
+            optimiseWinkesselParameters(LVclosed_object,strokeVolume,maxLVLApressureDiff,maxLVLVVALVpressureDiff,step=0,stopstep=stopstep,Q_regurge_flowratio=Q_regurge_flowratio,optVarList=None,baseFolder=baseFolder,folder=folder,folderToLVbehavior=folderToLVbehavior,runCycles=runCycles)
+        else:
+            LVclosed_object.setManualVolumeFile(LVclosed_object.casename+'/'+baseFolder+'/'+str(n)+'/volume.txt')
+            optimiseWinkesselParameters(LVclosed_object,strokeVolume,maxLVLApressureDiff,maxLVLVVALVpressureDiff,step=2,stopstep=stopstep,Q_regurge_flowratio=Q_regurge_flowratio,optVarList=None,baseFolder=baseFolder,folder=folder,folderToLVbehavior=folderToLVbehavior,runCycles=runCycles)
+    

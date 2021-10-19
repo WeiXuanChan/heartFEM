@@ -44,9 +44,13 @@ History:
                                                             -added Aortic_stenosis to multiple resistances from LV to AO
   Author: w.x.chan@gmail.com         20Sep2021           - v3.5.1
                                                             -added switchvalve
+  Author: w.x.chan@gmail.com         29Sep2021           - v3.6.0
+                                                            -added regurgitation at aortic and pulmonary valve
+                                                            -added "StrainEnergyDensityFunction_Coef"
 '''
-_version='3.5.1'
+_version='3.6.0'
 import logging
+import numpy as np
 logger = logging.getLogger(__name__)
 
 parameters_for_FEniCS=['Kspring_constant','Tact_constant','T0_LV','ESV_LV','lr','BCL','Ca0','Ca0max','B','t0','l0','m','b']                 
@@ -153,6 +157,7 @@ class heartParameters(dict):
         
         self['lr'] = 1.85
         
+        self["StrainEnergyDensityFunction_Coef"]=100.
         self["StrainEnergyDensityFunction_Cff"]=29.9
         self["StrainEnergyDensityFunction_Css"]=13.3
         self["StrainEnergyDensityFunction_Cnn"]=13.3
@@ -181,7 +186,7 @@ class heartParameters(dict):
             self['Ca0'] = 4.35 #peak intracellular calcium concentration, µM
             self['Ca0max'] = 4.35 #maximum peak intracellular calcium concentration, µM 
             self['B'] = 4.75 #governs shape of peak isometric tension-sarcomere length relation, µm−1
-            self['t0'] = 150.5#238 #150.5#170 #132.5 #time to peak tension, ms
+            self['t0'] = 140.5#238 #150.5#170 #132.5 #time to peak tension, ms
             self['l0'] = 1.58#1.58 #sarcomere length at which no active tension develops,µm
             self['m'] = 1048*0.5#1049 #slope of linear relaxation duration-sarcomere length relation, ms µm−1
             self['b'] = -1600*0.5#0.5*(m_adult*l0+b_adult)-m_fetal #time-intercept of linear relaxation duration-sarcomere length relation, ms
@@ -304,8 +309,12 @@ class heartParameters(dict):
             
             self['lvregurger']=-1
             self['lvregurgevalveratio']=-1
+            self['aaregurger']=-1
+            self['aaregurgevalveratio']=-1
             self['rvregurger']=-1
             self['rvregurgevalveratio']=-1
+            self['pa1regurger']=-1
+            self['pa1regurgevalveratio']=-1
             self['switchvalve']=0
             
             self['ES_time']=None
@@ -393,3 +402,47 @@ class heartParameters(dict):
             for key in self.keys():
                 if key in editParameters:
                     self[key]=editParameters[key]
+    def getFetalPopulation_LVEDP(self,ageInWeeks):
+        #from P Johnsona, D J Maxwellb, M J Tynanb, L D Allanc, "Intracardiac pressures in the human fetus"
+        return 0.7018*ageInWeeks-7.62928682
+    #other possible volume reference: doi=10.3760/cma.j.issn.1004-4477.2016.07.005
+    def getFetalPopulation_min_LAwidth(self,ageInWeeks):
+        #Yan Kai Mao, Bo Wen Zhao, Feng Hua Zheng, Bei Wang, Xiao Hui Peng, Ran Chen, Mei Pan, "Z-scores for fetal left atrial size and left atrium–descending aorta distance in fetuses with isolated total anomalous pulmonary venous connection"
+        return -0.11399+0.04125*ageInWeeks
+    def getFetalPopulation_min_LAlength(self,ageInWeeks):
+        #Yan Kai Mao, Bo Wen Zhao, Feng Hua Zheng, Bei Wang, Xiao Hui Peng, Ran Chen, Mei Pan, "Z-scores for fetal left atrial size and left atrium–descending aorta distance in fetuses with isolated total anomalous pulmonary venous connection"
+        return -0.13371+0.05186*ageInWeeks
+    def getFetalPopulation_min_LAarea(self,ageInWeeks):
+        #Yan Kai Mao, Bo Wen Zhao, Feng Hua Zheng, Bei Wang, Xiao Hui Peng, Ran Chen, Mei Pan, "Z-scores for fetal left atrial size and left atrium–descending aorta distance in fetuses with isolated total anomalous pulmonary venous connection"
+        return -1.4234+0.095489*ageInWeeks
+    
+    def getFetalPopulation_LAwidth(self,ageInWeeks):
+        #Julie  Tan,  MD, Norman H.  Silverman, MD, DSc(Med),  Julien  I. E.  Hoffman, MD, Maria  Villegas,  and  Klaus  G.  Schmidt, MD, "Cardiac Dimensions Determined by Cross-Sectional Echocardiography in  the Normal Human Fetus  from 18  Weeks  to  Term "
+        return -1.246+0.1305*ageInWeeks-0.001563*ageInWeeks**2.
+    def getFetalPopulation_LAlength(self,ageInWeeks):
+        #Julie  Tan,  MD, Norman H.  Silverman, MD, DSc(Med),  Julien  I. E.  Hoffman, MD, Maria  Villegas,  and  Klaus  G.  Schmidt, MD, "Cardiac Dimensions Determined by Cross-Sectional Echocardiography in  the Normal Human Fetus  from 18  Weeks  to  Term "
+        return -0.6508+0.0873*ageInWeeks-0.000674*ageInWeeks**2.
+    def getFetalPopulation_LAwidth2(self,ageInWeeks):
+        #Julie  Tan,  MD, Norman H.  Silverman, MD, DSc(Med),  Julien  I. E.  Hoffman, MD, Maria  Villegas,  and  Klaus  G.  Schmidt, MD, "Cardiac Dimensions Determined by Cross-Sectional Echocardiography in  the Normal Human Fetus  from 18  Weeks  to  Term "
+        return -0.3422+0.0498*ageInWeeks
+    def getFetalPopulation_LAlength2(self,ageInWeeks):
+        #Julie  Tan,  MD, Norman H.  Silverman, MD, DSc(Med),  Julien  I. E.  Hoffman, MD, Maria  Villegas,  and  Klaus  G.  Schmidt, MD, "Cardiac Dimensions Determined by Cross-Sectional Echocardiography in  the Normal Human Fetus  from 18  Weeks  to  Term "
+        return -0.6408+0.0707*ageInWeeks
+    def getFetalPopulation_LV_SV(self,ageInWeeks):
+        #F. S. Molina, C. Faro, A. Sotiriadis, T. Dagklis, K. H. Nicolaides, "Heart stroke volume and cardiac output by four-dimensional ultrasound in normal fetuses"
+        #given coefficient seems to be wrong
+        #return np.exp(-12.662+0.136*ageInWeeks-(4.715*10.**-4)*ageInWeeks**2.-(5.597*10.**-7)*ageInWeeks**3.
+        return 2.27637837-0.360074530*ageInWeeks+(1.68491289*10.**-2)*ageInWeeks**2.-(1.88355120*10.**-4)*ageInWeeks**3.
+    def getFetalPopulation_LAEDV(self,ageInWeeks):
+        LASV=self.getFetalPopulation_LV_SV(ageInWeeks)
+        #Panupong Jiamsripong, Tadaaki Honda, Christina S. Reuss, R. Todd Hurst, Hari P. Chaliki, Diane E. Grill, Stephen L. Schneck, Rochelle Tyler, Bijoy K. Khandheria, Steven J. Lester, "Three methods for evaluation of left atrial volume"
+        #method 3
+        #ED_LA_volume=-LASV+0.523*((self.getFetalPopulation_LAlength(ageInWeeks)+self.getFetalPopulation_LAlength2(ageInWeeks))/2.)*(self.getFetalPopulation_LAwidth(ageInWeeks))*(self.getFetalPopulation_LAwidth2(ageInWeeks))
+        #method 1 with A1=A2
+        ED_LA_volume=2.*0.85*(self.getFetalPopulation_min_LAarea(ageInWeeks)**2.)/(self.getFetalPopulation_min_LAlength(ageInWeeks))
+        return ED_LA_volume
+    def getFetalPopulation_LA_unloadedVolume(self,ageInWeeks):
+        LAEDV=self.getFetalPopulation_LAEDV(ageInWeeks)
+        LAEDP=self.getFetalPopulation_LVEDP(ageInWeeks)
+        LA_Capacitance=heartParameters(defaultAge='fetal'+str(ageInWeeks))['lac']
+        return LAEDV-LAEDP*LA_Capacitance
