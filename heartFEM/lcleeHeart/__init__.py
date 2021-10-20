@@ -46,8 +46,10 @@ History:
   Author: w.x.chan@gmail.com         05OCT2021           - v3.6.0
                                                             - added  "StrainEnergyDensityFunction_Coef"
                                                             - added trackphase and updatephase
+  Author: w.x.chan@gmail.com         20OCT2021           - v3.6.1
+                                                            - added  input of endo and epi angles as file with columns x,y,z,angle
 '''
-_version='3.6.0'
+_version='3.6.1'
 
 import sys
 
