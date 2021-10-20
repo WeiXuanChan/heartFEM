@@ -125,8 +125,12 @@ History:
                                                             -ngspice_py v3.5.0
                                                             -heartParameters v3.6.0
                                                             -lcleeHeart v3.6.0
+  Author: w.x.chan@gmail.com         05Oct2021           - v3.6.1
+                                                            -ngspice_py v3.5.0
+                                                            -heartParameters v3.6.0
+                                                            -lcleeHeart v3.6.1
 '''
-_version='3.6.0'
+_version='3.6.1'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
