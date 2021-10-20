@@ -32,9 +32,34 @@ def randomWithNearby(randFunc,x,mu,sigma,numtry=10):
         randVal[n]=randFunc()
         probVal[n]=normalDistribution(randVal[n],mu,sigma)+probVal[n-1]
     return randVal[numpy.argmax(randuniform(0,probVal[-1])<=probVal)]
+class angleAssignment:
+    def __new__(cls, *args, **kwargs):
+        return super().__new__(cls)
+    def __init__(self,angle):
+        if isinstance(angle,(float,int)):
+            self.type="constant"
+            self.angle=angle
+        elif isinstance(angle,str):
+            #data arranged as x,y,z,angle
+            self.angle=numpy.loadtxt(angle)
+            self.type="reference"
+    def __call__(self,*args):
+        if self.type=="constant":
+            return self.angle
+        elif self.type=="reference":
+            #args[0]=[x,y,z], args[1]=normvector x,y,z
+            coord=numpy.array(args[0])
+            disVec=self.angle[:,:3]-coord.reshape((1,3))
+            if len(args)>1:
+                normvector=numpy.array(args[1])/numpy.linalg.norm(args[1])
+                dis=numpy.linalg.norm(numpy.cross(disVec,normvector),axis=1)
+            else:
+                dis=numpy.linalg.norm(disVec,axis=1)
+            return self.angle[numpy.argmin(dis),3]
+            
 def addLocalFiberOrientation(ugrid_wall,
-                             fiber_angle_end,
-                             fiber_angle_epi,
+                             fiber_angle_end_input,
+                             fiber_angle_epi_input,
                              points_AB=None,
                              fiberSheetletAngle=0., #can be a function(coord=), include **kwargs in input
                              fiberSheetletWidth=0., #can be a class with __call__(coord=,sheetlet_angle=), include **kwargs in input and self.max=max_width
@@ -43,7 +68,7 @@ def addLocalFiberOrientation(ugrid_wall,
                              verbose=True):
 
     if (verbose): print ('*** addLocalFiberOrientation ***')
-
+    
     if (points_AB == None):
         points_AB = getABPointsFromBoundsAndCenter(ugrid_wall, verbose)
     assert (points_AB.GetNumberOfPoints() >= 2), "\"points_AB\" must have at least two points. Aborting."
@@ -56,7 +81,9 @@ def addLocalFiberOrientation(ugrid_wall,
     eL = distAB/longitudinalLength
 
     if (verbose): print ("Computing local fiber orientation...")
-
+    fiber_angle_end=angleAssignment(fiber_angle_end_input)
+    fiber_angle_epi=angleAssignment(fiber_angle_epi_input)
+    
     farray_norm_dist_end = ugrid_wall.GetCellData().GetArray("norm_dist_end")
     farray_norm_dist_epi = ugrid_wall.GetCellData().GetArray("norm_dist_epi")
     farray_eRR = ugrid_wall.GetCellData().GetArray("eRR")
@@ -97,7 +124,7 @@ def addLocalFiberOrientation(ugrid_wall,
         eCC = numpy.array(farray_eCC.GetTuple(num_cell))
         eLL = numpy.array(farray_eLL.GetTuple(num_cell))
         if fiberSheetletAngle==0. and radialFiberAngle==0.:
-            fiber_angle_in_degrees = (1.-norm_dist_end) * fiber_angle_end + (1.-norm_dist_epi) * fiber_angle_epi
+            fiber_angle_in_degrees = (1.-norm_dist_end) * fiber_angle_end(cell_centers[num_cell]) + (1.-norm_dist_epi) * fiber_angle_epi(cell_centers[num_cell])
             farray_fiber_angle.InsertTuple(num_cell, [fiber_angle_in_degrees])
             
             fiber_angle_in_radians = math.pi*fiber_angle_in_degrees/180
@@ -220,7 +247,7 @@ def addLocalFiberOrientation(ugrid_wall,
             fiberSheetletAngle_in_radians=math.pi*sheetlet_angle/180
             adjusted_norm_dist_end=norm_dist_end+sheeletShifttowardsEndo
             adjusted_norm_dist_epi=norm_dist_epi-sheeletShifttowardsEndo
-            fiber_angle_in_degrees = max(0,min(1,1.-adjusted_norm_dist_end)) * fiber_angle_end + max(0,min(1,1.-adjusted_norm_dist_epi)) * fiber_angle_epi
+            fiber_angle_in_degrees = max(0,min(1,1.-adjusted_norm_dist_end)) * fiber_angle_end(cell_centers[num_cell]) + max(0,min(1,1.-adjusted_norm_dist_epi)) * fiber_angle_epi(cell_centers[num_cell])
             if adjusted_norm_dist_end>1 or adjusted_norm_dist_end<0:
                 fdensity=0.
             else:
