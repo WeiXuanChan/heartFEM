@@ -129,8 +129,13 @@ History:
                                                             -ngspice_py v3.5.0
                                                             -heartParameters v3.6.0
                                                             -lcleeHeart v3.6.1
+  Author: w.x.chan@gmail.com         05Oct2021           - v3.6.2
+                                                            -in iterativeRun, save PV_.txt again to make sure of output  
+                                                            -ngspice_py v3.5.0
+                                                            -heartParameters v3.6.0
+                                                            -lcleeHeart v3.6.1
 '''
-_version='3.6.1'
+_version='3.6.2'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
@@ -1522,7 +1527,7 @@ class LVclosed:
             else:
                 heart=setHeart
             
-        elif runParameters['EDP_LV'] is None and not(unloadGeo):
+        elif not(unloadGeo):
             if min(self.defaultParameters.getParameterRelation(editParameters.keys())+[2])<1:
                 heart=lcleeHeart.heart(self.casename+'/'+str(self.runCount),self.meshname,runParameters,trackphase=trackphase)
             else:
@@ -1682,7 +1687,8 @@ class LVclosed:
         
         if(fenics.MPI.rank(heart.comm) == 0):
         	fdataPV.close()
-        
+        if not(os.path.isfile(self.casename+"/"+str(self.runCount)+"/PV_.txt")):
+            np.savetxt(self.casename+"/"+str(self.runCount)+"/PV_.txt",np.array([t_array,Pcav_array,LVcav_array]))
         if (tstep >= runParameters['BCL']):
         	t_array=np.array(t_array)
         	if (tstep >= 2*runParameters['BCL']):
