@@ -129,13 +129,13 @@ History:
                                                             -ngspice_py v3.5.0
                                                             -heartParameters v3.6.0
                                                             -lcleeHeart v3.6.1
-  Author: w.x.chan@gmail.com         05Oct2021           - v3.6.2
+  Author: w.x.chan@gmail.com         28Oct2021           - v3.6.3
                                                             -in iterativeRun, save PV_.txt again to make sure of output  
                                                             -ngspice_py v3.5.0
                                                             -heartParameters v3.6.0
                                                             -lcleeHeart v3.6.1
 '''
-_version='3.6.2'
+_version='3.6.3'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
@@ -1550,7 +1550,8 @@ class LVclosed:
         Pcav_array = [heart.uflforms.cavitypressure()*0.0075]
         #Joy Changed from here
         #Stress calculation 
-        
+        if os.path.isfile(self.casename+"/"+str(self.runCount)+"/PV_.txt"):
+            os.remove(self.casename+"/"+str(self.runCount)+"/PV_.txt") 
         ###stress_File << cauchy ## wei xuan remove
         if(fenics.MPI.rank(heart.comm) == 0): #added to output the volume, stroke volume data before the while loop
             fdataPV = open(self.casename+"/"+str(self.runCount)+"/PV_.txt", "w")
