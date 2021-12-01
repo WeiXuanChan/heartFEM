@@ -134,8 +134,13 @@ History:
                                                             -ngspice_py v3.5.0
                                                             -heartParameters v3.6.0
                                                             -lcleeHeart v3.6.1
+  Author: w.x.chan@gmail.com         02Dec2021           - v3.6.4
+                                                            -debug iterative run with unloadGeo=True , save and load heart at different folder  
+                                                            -ngspice_py v3.5.0
+                                                            -heartParameters v3.6.0
+                                                            -lcleeHeart v3.6.1
 '''
-_version='3.6.3'
+_version='3.6.4'
 import logging
 logger = logging.getLogger('heartFEM v'+_version)
 logger.info('heartFEM version '+_version)
@@ -1537,7 +1542,7 @@ class LVclosed:
         	    self.getUnloadedGeometry(editParameters=runParameters,casename=self.casename+'/'+str(self.runCount),targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],savename=self.meshname+'_unloadedmesh',tryPressureRatio=tryPressureRatio)
         	    heart=lcleeHeart.heart(self.casename+'/'+str(self.runCount),self.meshname+'_unloadedmesh',runParameters,trackphase=trackphase)
             else:
-        	    self.getUnloadedGeometry(editParameters=runParameters,savename=self.meshname+'_unloadedmesh',targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],toRunCountFolder=True,tryPressureRatio=tryPressureRatio)
+        	    self.getUnloadedGeometry(editParameters=runParameters,savename=self.meshname+'_unloadedmesh',targetPressure=runParameters['EDP_LV'],targetVolume=runParameters['EDV_LV'],toRunCountFolder=False,tryPressureRatio=tryPressureRatio)
         	    heart=lcleeHeart.heart(self.casename,self.meshname+'_unloadedmesh',runParameters,trackphase=trackphase)
         heart.dt.dt = 1.
         if manualPhaseTimeInput and self.manualPhaseTime is not None:
