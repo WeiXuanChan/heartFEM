@@ -86,29 +86,29 @@ def createLVcircuit(casename,paramDict,stepTime=10,skipVariableList=None,verbose
         if valve+"regurgevalveratio" not in skipVariableList:
             cmd = "sed -i.bak s/'<<"+valve+"regurgevalveratio>>'/'" + str(paramDict[valve+"regurgevalveratio"]) + "'/g " + cirfilename
             os.system(cmd)
-    if "switchvalve" not in skipVariableList:
-        cmd = "sed -i.bak s/'<<switchvalve>>'/'" + str(paramDict["switchvalve"])+ "'/g " + cirfilename
-        os.system(cmd)
-    if "rvfunc" not in skipVariableList:
-        cmd = "sed -i.bak s/'<<rvfunc>>'/'" + paramDict['rvfunc'] + "'/g " + cirfilename
-        os.system(cmd)
-    if "timetopeaktension" not in skipVariableList:
-        cmd = "sed -i.bak s/'<<timetopeaktension>>'/'" + str(paramDict['t0'])+ "m'/g " + cirfilename
-        os.system(cmd)
+    for cavity in ['la','ra','lv','rv']:
+        if cavity+'sourcemode' not in skipVariableList:
+            cmd = "sed -i.bak s/'<<"+cavity+"sourcemode>>'/'" + paramDict[cavity+"sourcemode"] + "'/g " + cirfilename
+            os.system(cmd)
+        if cavity+"timetopeaktension" not in skipVariableList:
+            cmd = "sed -i.bak s/'<<"+cavity+"timetopeaktension>>'/'" + str(paramDict['t0'])+ "m'/g " + cirfilename
+            os.system(cmd)
     if "rvfuncarg" not in skipVariableList:
-        for n in range(int(len(paramDict['rvfuncarg'])/2)):
-            if n>0:
-                cmd = "sed -i.bak s/'*Irvu"+str(n+1)+"'/'" + "Irvu"+str(n+1) + "'/g " + cirfilename
+        for n in range(4):
+            if n<int(len(paramDict['rvfuncarg'])/2)):
+                suffixDict_ind=max(-5,min(4,int(np.floor(np.log10(abs(paramDict[paramDict['rvfuncarg'][n*2]]))/3.))))
+                rvfuncarg='{:10.6f}'.format(paramDict[paramDict['rvfuncarg'][n*2]]/(1000.**suffixDict_ind))+suffixDict[suffixDict_ind]
+                cmd = "sed -i.bak s/'<<rvuamp"+str(n+1)+">>'/'" + rvfuncarg + "'/g " + cirfilename
                 os.system(cmd)
-            suffixDict_ind=max(-5,min(4,int(np.floor(np.log10(abs(paramDict[paramDict['rvfuncarg'][n*2]]))/3.))))
-            rvfuncarg='{:10.6f}'.format(paramDict[paramDict['rvfuncarg'][n*2]]/(1000.**suffixDict_ind))+suffixDict[suffixDict_ind]
-            
-            cmd = "sed -i.bak s/'<<rvuamp"+str(n+1)+">>'/'" + rvfuncarg + "'/g " + cirfilename
-            os.system(cmd)
-        
-            rvfuncarg='{:10.6f}'.format(paramDict[paramDict['rvfuncarg'][n*2+1]])
-            cmd = "sed -i.bak s/'<<rvuphase"+str(n+1)+">>'/'" + rvfuncarg + "'/g " + cirfilename
-            os.system(cmd)
+                
+                rvfuncarg='{:10.6f}'.format(paramDict[paramDict['rvfuncarg'][n*2+1]])
+                cmd = "sed -i.bak s/'<<rvuphase"+str(n+1)+">>'/'" + rvfuncarg + "'/g " + cirfilename
+                os.system(cmd)
+            else:
+                cmd = "sed -i.bak s/'<<rvuamp"+str(n+1)+">>'/'0'/g " + cirfilename
+                os.system(cmd)
+                cmd = "sed -i.bak s/'<<rvuphase"+str(n+1)+">>'/'0'/g " + cirfilename
+                os.system(cmd)
     
     if "stepTime" not in skipVariableList:
         cmd = "sed -i.bak s/'<<stepTime>>'/'" + str(stepTime)+'u'+ "'/g " + cirfilename
