@@ -314,7 +314,6 @@ class heartParameters(dict):
             
             self['lasourcemode']=0
             self['rasourcemode']=0
-            self['lvsourcemode']=4
             self['rvsourcemode']=1
             
             self['ES_time']=None
