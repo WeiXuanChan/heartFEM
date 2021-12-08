@@ -1,84 +1,200 @@
-*version 3.6.0
+*version 3.7.0
 *units in Pressure:mmHg, Volume:mL, time:s
-
+*chamber source mode: 0=pressure pulse with capacitor, 1=fourier current, 2=timebased, 3=2d table,4=2dtable with trackphase, 5=3d table
 .title LV full circuit
 
 .PARAM PI = 3.14159265359
-.PARAM heartperiod = <<cycle>>
-.PARAM activepeaktime  = <<timetopeaktension>>
-.PARAM freq1 = 1 / heartperiod
-.PARAM freq2 = 2 / heartperiod
-.PARAM freq3 = 3 / heartperiod
-.PARAM freq4 = 4 / heartperiod
-.PARAM trackrelaxphase = 0
-.PARAM switchvalve = <<switchvalve>>
-.PARAM lvregurgitation = <<lvregurger>>
-.PARAM lvregurgitationvalveratio = <<lvregurgevalveratio>>
-.PARAM aaregurgitation = <<aaregurger>>
-.PARAM aaregurgitationvalveratio = <<aaregurgevalveratio>>
-.PARAM rvregurgitation = <<rvregurger>>
-.PARAM rvregurgitationvalveratio = <<rvregurgevalveratio>>
-.PARAM pa1regurgitation = <<pa1regurger>>
-.PARAM pa1regurgitationvalveratio = <<pa1regurgevalveratio>>
+.PARAM lasourcemode = <<lasourcemode>>
+.PARAM rasourcemode = <<rasourcemode>>
+.PARAM lvsourcemode = <<lvsourcemode>>
+.PARAM rvsourcemode = <<rvsourcemode>>
 
-.func manmod(shorttime) {shorttime - floor(shorttime / heartperiod) * heartperiod}
-.func disfrompeak(xtime,peaktime,width) {min( abs( manmod(xtime) - peaktime) , heartperiod - abs( manmod(xtime) - peaktime))}
+.func manmod(shorttime,period) {shorttime - floor(shorttime / period) * period}
+.func disfrompeak(xtime,peaktime,width) {min( abs( xtime - peaktime) , period - abs( xtime - peaktime))}
 .func cossq(xtime,amp,peaktime,width) {amp * cos( PI * disfrompeak( xtime , peaktime , width ) / width)^2}
 
 .model valve sidiode(Roff=10k Ron=1m Rrev=10 Vfwd=0.1 Vrev=1k Revepsilon=0.2 Epsilon=0.2)
-
-.subckt swdiode a k a1
-s1 a k a1 k diosw
-.model diosw sw vt=0 vh=0.001 ron=100n roff=10e9
-.ends swdiode
 
 .subckt vein in out rval=100k lval=1n
 R1 1  out    r = rval
 L1 in 1    l = lval
 .ends vein
 
-Vlaprobe lagnd lagnd2 dc 0
-Vraprobe ragnd ragnd2 dc 0
+Eheartperiod heartperiod gnd vol = ' <<cycle>> '
+Bcumulativeheartphase  cumulativeheartphase gnd I = -2*PI/v(heartperiod) 
+acumulativeheartphase  cumulativeheartphase gnd heartphaseconvertcap
+.model heartphaseconvertcap capacitor (c=1 ic=0)
+Eheartphase heartphase gnd vol = ' manmod(v(cumulativeheartphase),2*PI) '
+Elaactivepeaktime laactivepeaktime gnd vol = ' <<latimetopeaktension>> '
+Eraactivepeaktime raactivepeaktime gnd vol = ' <<ratimetopeaktension>> '
+Elvactivepeaktime lvactivepeaktime gnd vol = ' <<lvtimetopeaktension>> '
+Ervactivepeaktime rvactivepeaktime gnd vol = ' <<rvtimetopeaktension>> '
+Elvregurgitationvalveratio lvregurgitationvalveratio gnd vol = ' <<lvregurgevalveratio>> '
+Eaaregurgitationvalveratio aaregurgitationvalveratio gnd vol = ' <<aaregurgevalveratio>> '
+Ervregurgitationvalveratio rvregurgitationvalveratio gnd vol = ' <<rvregurgevalveratio>> '
+Epa1regurgitationvalveratio pa1regurgitationvalveratio gnd vol = ' <<pa1regurgevalveratio>> '
+Etime timecyclic gnd vol = 'v(heartperiod) *v(heartphase)/2/PI'
+
+Vlaprobe la    lagnd  dc 0
+Vraprobe ra    ragnd dc 0
 Vlvprobe lv    lvgnd  dc 0
-Vrvprobe rvgnd rvgnd2 dc 0
+Vrvprobe rv    rvgnd dc 0
 
-Irvu1   rv       rvgnd   SIN(0 <<rvuamp1>> freq1 0 0 <<rvuphase1>>)
-*Irvu2   rv       rvgnd   SIN(0 <<rvuamp2>> freq2 0 0 <<rvuphase2>>)
-*Irvu3   rv       rvgnd   SIN(0 <<rvuamp3>> freq3 0 0 <<rvuphase3>>)
-*Irvu4   rv       rvgnd   SIN(0 <<rvuamp4>> freq4 0 0 <<rvuphase4>>)
+.if (lasourcemode == 0)
+Cla    lagnd   lagnd2   <<lac>> 
+Elau   lagnd2  gnd      vol = 'cossq( v(timecyclic) ,<<laamp>>,<<lapeaktime>>,<<lawidth>>)'
+.elif (lasourcemode == 1)
+Glau1   lagnd       gnd   cur = '<<lauamp1>> * sin(manmod(v(cumulativeheartphase),2*PI) +       <<lauphase1>>/180*PI)'
+Glau2   lagnd       gnd   cur = '<<lauamp2>> * sin(manmod(v(cumulativeheartphase),PI) * 2 +     <<lauphase2>>/180*PI)'
+Glau3   lagnd       gnd   cur = '<<lauamp3>> * sin(manmod(v(cumulativeheartphase),PI*2/3) * 3 + <<lauphase3>>/180*PI)'
+Glau4   lagnd       gnd   cur = '<<lauamp4>> * sin(manmod(v(cumulativeheartphase),PI/2) * 4 +   <<lauphase4>>/180*PI)'
+.else
+Blau   lagnd   gnd  <<lainputvar>> = v(lagenerator0) + v(lagenerator1)
+.if (lasourcemode == 2)
+alau0 %v[lagenerator0] la_pwl_input
+.model la_pwl_input filesource (file="<<laufile>>" amploffset=[0] amplscale=[1] timeoffset=0 timescale=1 timerelative=false amplstep=false)
+Vlau1 lagenerator1   gnd  dc 0
+.elif (lasourcemode < 5)
+alau0 gnd lavol %v(lagenerator0) lautabmod0
+.model lautabmod0 table2d (offset=0.0 gain=1 order=3 file="<<lautablebasefile>>")
+alau1 lavol laphasetime %v(lagenerator1) lautabmod
+.model lautabmod table2d (offset=0.0 gain=1 order=3 file="<<lautablefile>>")
+.if (lasourcemode == 3)
+Vpasslaphasetime laphasetime timecyclic dc 0
+.else
+Bestphase laestphase gnd V = v(timecyclic)/laactivepeaktime
+Blarisecurrent gnd lacurrentphase I =  ((v(timecyclic) <= laactivepeaktime) ? (v(lacurrentphase) >= (1 - (3 * <<stepTime>> * v(larisetemp)))  ? (1-v(lacurrentphase))/(3 * <<stepTime>> * v(larisetemp))*v(larisetemp) : v(larisetemp) ) : 0)
+Blarisetemp larisetemp gnd V = 1/laactivepeaktime*10
+Blafallcurrent lacurrentphase gnd I = (v(timecyclic) < laactivepeaktime) ? 0 : v(lafalltemp)
+Blafalltemp lafalltemp gnd V =  1/v(latr)
+alapressgrad  lacurrentphase gnd latrcap
+.model latrcap capacitor (c=1 ic=0)
+alatr gnd lavol %v(latr) lautabtrmod
+.model lautabtrmod table2d (offset=0.0 gain=1 order=3 file="<<latrtablefile>>")
+Blaphase laphase gnd V = max(0,min(1,v(lacurrentphase)))
+Btime2 laphasetime gnd V =  (v(timecyclic) > laactivepeaktime) ? (laactivepeaktime + v(latr) * (1-v(lacurrentphase))) : v(timecyclic)
+.endif
+.else
+alau0 gnd lavol %v(lagenerator0) lautabmod0
+.model lautabmod0 table2d (offset=0.0 gain=1 order=3 file="<<lautablebasefile>>")
+alau1 lavol laphasetime %v(lagenerator1) lautabmod
+.model lautabmod table3d (offset=0.0 gain=1 order=3 file="<<lautablefile>>")
+*****
+.endif
+.endif
 
-Cra    ra       ragnd   <<rac>> 
-Cla    la       lagnd   <<lac>> 
 
-alvu1 %v[lvgenerator] pwl_input
-.model pwl_input filesource (file="<<lvufile>>" amploffset=[0] amplscale=[1] timeoffset=0 timescale=1 timerelative=false amplstep=false)
+.if (rasourcemode == 0)
+Cra    ragnd   ragnd2   <<rac>> 
+Erau   ragnd2  gnd      vol = 'cossq( v(timecyclic) ,<<raamp>>,<<rapeaktime>>,<<rawidth>>)'
+.elif (rasourcemode == 1)
+Grau1   ragnd       gnd   cur = '<<rauamp1>> * sin(manmod(v(cumulativeheartphase),2*PI) +       <<rauphase1>>/180*PI)'
+Grau2   ragnd       gnd   cur = '<<rauamp2>> * sin(manmod(v(cumulativeheartphase),PI) * 2 +     <<rauphase2>>/180*PI)'
+Grau3   ragnd       gnd   cur = '<<rauamp3>> * sin(manmod(v(cumulativeheartphase),PI*2/3) * 3 + <<rauphase3>>/180*PI)'
+Grau4   ragnd       gnd   cur = '<<rauamp4>> * sin(manmod(v(cumulativeheartphase),PI/2) * 4 +   <<rauphase4>>/180*PI)'
+.else
+Brau   ragnd   gnd  <<rainputvar>> = v(ragenerator0) + v(ragenerator1)
+.if (rasourcemode == 2)
+arau0 %v[ragenerator0] ra_pwl_input
+.model ra_pwl_input filesource (file="<<raufile>>" amploffset=[0] amplscale=[1] timeoffset=0 timescale=1 timerelative=false amplstep=false)
+Vrau1 ragenerator1   gnd  dc 0
+.else
+arau0 gnd ravol %v(ragenerator0) rautabmod0
+.model rautabmod0 table2d (offset=0.0 gain=1 order=3 file="<<rautablebasefile>>")
+arau1 ravol raphasetime %v(ragenerator1) rautabmod
+.model rautabmod table2d (offset=0.0 gain=1 order=3 file="<<rautablefile>>")
+.if (rasourcemode == 3)
+Vpassraphasetime raphasetime timecyclic dc 0
+.else
+Bestphase raestphase gnd V = v(timecyclic)/raactivepeaktime
+Brarisecurrent gnd racurrentphase I =  ((v(timecyclic) <= raactivepeaktime) ? (v(racurrentphase) >= (1 - (3 * <<stepTime>> * v(rarisetemp)))  ? (1-v(racurrentphase))/(3 * <<stepTime>> * v(rarisetemp))*v(rarisetemp) : v(rarisetemp) ) : 0)
+Brarisetemp rarisetemp gnd V = 1/raactivepeaktime*10
+Brafallcurrent racurrentphase gnd I = (v(timecyclic) < raactivepeaktime) ? 0 : v(rafalltemp)
+Brafalltemp rafalltemp gnd V =  1/v(ratr)
+arapressgrad  racurrentphase gnd ratrcap
+.model ratrcap capacitor (c=1 ic=0)
+aratr gnd ravol %v(ratr) rautabtrmod
+.model rautabtrmod table2d (offset=0.0 gain=1 order=3 file="<<ratrtablefile>>")
+Braphase raphase gnd V = max(0,min(1,v(racurrentphase)))
+Btime2 raphasetime gnd V =  (v(timecyclic) > raactivepeaktime) ? (raactivepeaktime + v(ratr) * (1-v(racurrentphase))) : v(timecyclic)
+.endif
+.endif
+.endif
 
-*Blvu2  lvgenerator gnd V = v(lvgenerator0) + v(lvgenerator1)
-*alvu20 gnd lvvol %v(lvgenerator0) lvutabmod0
-*.model lvutabmod0 table2d (offset=0.0 gain=1 order=3 file="<<lvutablebasefile>>")
-*alvu21 lvvol timecyclic %v(lvgenerator1) lvutabmod
-*alvu22 lvvol phasetime %v(lvgenerator1) lvutabmod
-*.model lvutabmod table2d (offset=0.0 gain=1 order=3 file="<<lvutablefile>>")
-
-.if (trackrelaxphase == 1)
-Bestphase lvestphase gnd V = v(timecyclic)/activepeaktime
-Blvrisecurrent gnd lvcurrentphase I =  ((v(timecyclic) <= activepeaktime) ? (v(lvcurrentphase) >= (1 - (3 * <<stepTime>> * v(lvrisetemp)))  ? (1-v(lvcurrentphase))/(3 * <<stepTime>> * v(lvrisetemp))*v(lvrisetemp) : v(lvrisetemp) ) : 0)
-Blvrisetemp lvrisetemp gnd V = 1/activepeaktime*10
-Blvfallcurrent lvcurrentphase gnd I = (v(timecyclic) < activepeaktime) ? 0 : v(lvfalltemp)
+.if (lvsourcemode == 0)
+Clv    lvgnd   lvgnd2   <<lvc>> 
+Elvu   lvgnd2  gnd      vol = 'cossq( v(timecyclic) ,<<lvamp>>,<<lvpeaktime>>,<<lvwidth>>)'
+.elif (lvsourcemode == 1)
+Glvu1   lvgnd       gnd   cur = '<<lvuamp1>> * sin(manmod(v(cumulativeheartphase),2*PI) +       <<lvuphase1>>/180*PI)'
+Glvu2   lvgnd       gnd   cur = '<<lvuamp2>> * sin(manmod(v(cumulativeheartphase),PI) * 2 +     <<lvuphase2>>/180*PI)'
+Glvu3   lvgnd       gnd   cur = '<<lvuamp3>> * sin(manmod(v(cumulativeheartphase),PI*2/3) * 3 + <<lvuphase3>>/180*PI)'
+Glvu4   lvgnd       gnd   cur = '<<lvuamp4>> * sin(manmod(v(cumulativeheartphase),PI/2) * 4 +   <<lvuphase4>>/180*PI)'
+.else
+Blvu   lvgnd   gnd  <<lvinputvar>> = v(lvgenerator0) + v(lvgenerator1)
+.if (lvsourcemode == 2)
+alvu0 %v[lvgenerator0] lv_pwl_input
+.model lv_pwl_input filesource (file="<<lvufile>>" amploffset=[0] amplscale=[1] timeoffset=0 timescale=1 timerelative=false amplstep=false)
+Vlvu1 lvgenerator1   gnd  dc 0
+.else
+alvu0 gnd lvvol %v(lvgenerator0) lvutabmod0
+.model lvutabmod0 table2d (offset=0.0 gain=1 order=3 file="<<lvutablebasefile>>")
+alvu1 lvvol lvphasetime %v(lvgenerator1) lvutabmod
+.model lvutabmod table2d (offset=0.0 gain=1 order=3 file="<<lvutablefile>>")
+.if (lvsourcemode == 3)
+Vpasslvphasetime lvphasetime timecyclic dc 0
+.else
+Bestphase lvestphase gnd V = v(timecyclic)/lvactivepeaktime
+Blvrisecurrent gnd lvcurrentphase I =  ((v(timecyclic) <= lvactivepeaktime) ? (v(lvcurrentphase) >= (1 - (3 * <<stepTime>> * v(lvrisetemp)))  ? (1-v(lvcurrentphase))/(3 * <<stepTime>> * v(lvrisetemp))*v(lvrisetemp) : v(lvrisetemp) ) : 0)
+Blvrisetemp lvrisetemp gnd V = 1/lvactivepeaktime*10
+Blvfallcurrent lvcurrentphase gnd I = (v(timecyclic) < lvactivepeaktime) ? 0 : v(lvfalltemp)
 Blvfalltemp lvfalltemp gnd V =  1/v(lvtr)
-
 alvpressgrad  lvcurrentphase gnd lvtrcap
 .model lvtrcap capacitor (c=1 ic=0)
 alvtr gnd lvvol %v(lvtr) lvutabtrmod
 .model lvutabtrmod table2d (offset=0.0 gain=1 order=3 file="<<lvtrtablefile>>")
 Blvphase lvphase gnd V = max(0,min(1,v(lvcurrentphase)))
-Btime2 phasetime gnd V =  (v(timecyclic) > activepeaktime) ? (activepeaktime + v(lvtr) * (1-v(lvcurrentphase))) : v(timecyclic)
-
-.else
-Vpassphasetime phasetime timecyclic dc 0
+Btime2 lvphasetime gnd V =  (v(timecyclic) > lvactivepeaktime) ? (lvactivepeaktime + v(lvtr) * (1-v(lvcurrentphase))) : v(timecyclic)
+.endif
+.endif
 .endif
 
-Etime timecyclic gnd vol = 'manmod(TIME)'
+.if (rvsourcemode == 0)
+Crv    rvgnd   rvgnd2   <<rvc>> 
+Ervu   rvgnd2  gnd      vol = 'cossq( v(timecyclic) ,<<rvamp>>,<<rvpeaktime>>,<<rvwidth>>)'
+.elif (rvsourcemode == 1)
+Grvu1   rvgnd       gnd   cur = '<<rvuamp1>> * sin(manmod(v(cumulativeheartphase),2*PI) +       <<rvuphase1>>/180*PI)'
+Grvu2   rvgnd       gnd   cur = '<<rvuamp2>> * sin(manmod(v(cumulativeheartphase),PI) * 2 +     <<rvuphase2>>/180*PI)'
+Grvu3   rvgnd       gnd   cur = '<<rvuamp3>> * sin(manmod(v(cumulativeheartphase),PI*2/3) * 3 + <<rvuphase3>>/180*PI)'
+Grvu4   rvgnd       gnd   cur = '<<rvuamp4>> * sin(manmod(v(cumulativeheartphase),PI/2) * 4 +   <<rvuphase4>>/180*PI)'
+.else
+Brvu   rvgnd   gnd  <<rvinputvar>> = v(rvgenerator0) + v(rvgenerator1)
+.if (rvsourcemode == 2)
+arvu0 %v[rvgenerator0] rv_pwl_input
+.model rv_pwl_input filesource (file="<<rvufile>>" amploffset=[0] amplscale=[1] timeoffset=0 timescale=1 timerelative=false amplstep=false)
+Vrvu1 rvgenerator1   gnd  dc 0
+.else
+arvu0 gnd rvvol %v(rvgenerator0) rvutabmod0
+.model rvutabmod0 table2d (offset=0.0 gain=1 order=3 file="<<rvutablebasefile>>")
+arvu1 rvvol rvphasetime %v(rvgenerator1) rvutabmod
+.model rvutabmod table2d (offset=0.0 gain=1 order=3 file="<<rvutablefile>>")
+.if (rvsourcemode == 3)
+Vpassrvphasetime rvphasetime timecyclic dc 0
+.else
+Bestphase rvestphase gnd V = v(timecyclic)/rvactivepeaktime
+Brvrisecurrent gnd rvcurrentphase I =  ((v(timecyclic) <= rvactivepeaktime) ? (v(rvcurrentphase) >= (1 - (3 * <<stepTime>> * v(rvrisetemp)))  ? (1-v(rvcurrentphase))/(3 * <<stepTime>> * v(rvrisetemp))*v(rvrisetemp) : v(rvrisetemp) ) : 0)
+Brvrisetemp rvrisetemp gnd V = 1/rvactivepeaktime*10
+Brvfallcurrent rvcurrentphase gnd I = (v(timecyclic) < rvactivepeaktime) ? 0 : v(rvfalltemp)
+Brvfalltemp rvfalltemp gnd V =  1/v(rvtr)
+arvpressgrad  rvcurrentphase gnd rvtrcap
+.model rvtrcap capacitor (c=1 ic=0)
+arvtr gnd rvvol %v(rvtr) rvutabtrmod
+.model rvutabtrmod table2d (offset=0.0 gain=1 order=3 file="<<rvtrtablefile>>")
+Brvphase rvphase gnd V = max(0,min(1,v(rvcurrentphase)))
+Btime2 rvphasetime gnd V =  (v(timecyclic) > rvactivepeaktime) ? (rvactivepeaktime + v(rvtr) * (1-v(rvcurrentphase))) : v(timecyclic)
+.endif
+.endif
+.endif
+
 
 Blavol  lavol gnd I = -i(Vlaprobe) 
 alavolconvert  lavol gnd lavolconvertcap
@@ -96,112 +212,51 @@ Brvvol  rvvol gnd I = -i(Vrvprobe)
 arvvolconvert  rvvol gnd rvvolconvertcap
 .model rvvolconvertcap capacitor (c=1 ic=<<rvinitvol>>)
 
-Blvu   lvgnd   lvgnd2  <<lvinputvar>> = v(lvgenerator)
-Vlvu   lvgnd2   gnd  dc 0
-*Elvu   lvgnd2  gnd     vol = 'v(lv)'
-Ervu   rvgnd2  gnd     vol = 'v(rv)'
-
-Elau   lagnd2  gnd     vol = 'cossq( TIME ,<<laamp>>,<<lapeaktime>>,<<lawidth>>)'
-Erau   ragnd2  gnd     vol = 'cossq( TIME ,<<raamp>>,<<rapeaktime>>,<<rawidth>>)'
-
 Vlalavalv  lavalvp1 lavalvp2 dc 0
 Vlvlvvalv  lv  lvvalvp1 dc 0
 Vraravalv  ravalvp1 ravalvp2 dc 0
 Vrvrvvalv  rv  rvvalvp1 dc 0
+Vfo  fovalvp1 fovalvp2 dc 0
+Vda  ao2p1 ao2p2 dc 0
+Vdv  ivcp1 ivcp2 dc 0
 
-Blalavalv  lavalvp2 lavalv V=' <<lalavalvk>> * ( i(Vlalavalv) ^2 )^( <<lalavalvb>> / 2) * sgn( i(Vlalavalv) ) '
+Elalavalvk lalavalvk gnd vol = ' <<lalavalvk>> '
+Blalavalv  lavalvp2 lavalv V=' v(lalavalvk) * ( i(Vlalavalv) ^2 )^( <<lalavalvb>> / 2) * sgn( i(Vlalavalv) ) '
+Elvlvvalvk lvlvvalvk gnd vol = ' <<lvlvvalvk>> '
+Blvlvvalv  lvvalvp1 lvvalvp2 V=' v(lvlvvalvk) * ( i(Vlvlvvalv) ^2 )^( <<lvlvvalvb>> / 2) * sgn( i(Vlvlvvalv) ) '
+Eraravalvk raravalvk gnd vol = ' <<raravalvk>> '
+Braravalv  ravalvp2 ravalv V=' v(raravalvk) * ( i(Vraravalv) ^2 )^( <<raravalvb>> / 2) * sgn( i(Vraravalv) ) '
+Ervrvvalvk rvrvvalvk gnd vol = ' <<rvrvvalvk>> '
+Brvrvvalv  rvvalvp1 rvvalvp2 V=' v(rvrvvalvk) * ( i(Vrvrvvalv) ^2 )^( <<rvrvvalvb>> / 2) * sgn( i(Vrvrvvalv) ) '
+Efok fok gnd vol = ' <<fok>> '
+Bfo  fovalvp2 fovalv V=' v(fok) * ( i(Vfo) ^2 )^( <<fob>> / 2) * sgn( i(Vfo) ) '
+Edak dak gnd vol = ' <<dak>> '
+Bda  ao2p2 ao2 V=' v(dak) * ( i(Vda) ^2 )^( <<dab>> / 2) * sgn( i(Vda) ) '
+Edvk dvk gnd vol = ' <<dvk>> '
+Bdv  ivcp2 ivc V=' v(dvk) * ( i(Vdv) ^2 )^( <<dvb>> / 2) * sgn( i(Vdv) ) '
 
-Blvlvvalv  lvvalvp1 lvvalvp2 V=' <<lvlvvalvk>> * ( i(Vlvlvvalv) ^2 )^( <<lvlvvalvb>> / 2) * sgn( i(Vlvlvvalv) ) '
-
-Braravalv  ravalvp2 ravalv V=' <<raravalvk>> * ( i(Vraravalv) ^2 )^( <<raravalvb>> / 2) * sgn( i(Vraravalv) ) '
-
-Brvrvvalv  rvvalvp1 rvvalvp2 V=' <<rvrvvalvk>> * ( i(Vrvrvvalv) ^2 )^( <<rvrvvalvb>> / 2) * sgn( i(Vrvrvvalv) ) '
-
-Bfo  fovalvp2 fovalv V=' <<fok>> * ( i(Vfo) ^2 )^( <<fob>> / 2) * sgn( i(Vfo) ) '
-
-
-.if (switchvalve==0)
 ala   lavalv   lv      valve
 alv   lvvalvp2 lvvalv  valve
 ara   ravalv   rv    valve
 arv   rvvalvp2 rvvalv    valve
 afo   fovalv   la    valve
-.else
-Xla   lavalv   lv     lavalvp1  swdiode
-Xlv   lvvalvp2 lvvalv lv        swdiode
-Xra   ravalv   rv     ravalvp1  swdiode
-Xrv   rvvalvp2 rvvalv rv        swdiode
-Xfo   fovalv   la     fovalvp1  swdiode
-.endif
 
 
-.if (lvregurgitation > 0)
 Vlvregurgitation  lv          lvregurp1   dc 0
-Blvregurgitation  lvregurp1   lvregurp2   V=' lvregurgitation * ( i(Vlvregurgitation) ^2 )^( <<lalavalvb>> / 2) * sgn( i(Vlvregurgitation) ) '
-.elseif (lvregurgitationvalveratio > 0)
-Vlvregurgitation  lv          lvregurp1   dc 0
-Blvregurgitation  lvregurp1   lvregurp2   V=' <<lalavalvk>> / lvregurgitationvalveratio * ( i(Vlvregurgitation) ^2 )^( <<lalavalvb>> / 2) * sgn( i(Vlvregurgitation) ) '
-.if (switchvalve==0)
+Blvregurgitation  lvregurp1   lvregurp2   V=' v(lalavalvk) / max(v(lvregurgitationvalveratio),1n) * ( i(Vlvregurgitation) ^2 )^( <<lalavalvb>> / 2) * sgn( i(Vlvregurgitation) ) '
 alvregurgitation  lvregurp2   lavalvp1    valve
-.else
-Xlvregurgitation  lvregurp2   lavalvp1  lv   swdiode
-.endif
-.else
-Vlvregurgitation   lv          lvregurp1   dc 0
-Vlvregurgitation2  lavalvp1    lvregurp2   dc 0
-.endif
 
-.if (aaregurgitation > 0)
 Vaaregurgitation  lvvalv      aaregurp1   dc 0
-Baaregurgitation  aaregurp1   aaregurp2   V=' aaregurgitation * ( i(Vaaregurgitation) ^2 )^( <<lvlvvalvb>> / 2) * sgn( i(Vaaregurgitation) ) '
-.elseif (aaregurgitationvalveratio > 0)
-Vaaregurgitation  lvvalv      aaregurp1   dc 0
-Baaregurgitation  aaregurp1   aaregurp2   V=' <<lvlvvalvk>> / aaregurgitationvalveratio * ( i(Vaaregurgitation) ^2 )^( <<lvlvvalvb>> / 2) * sgn( i(Vaaregurgitation) ) '
-.if (switchvalve==0)
+Baaregurgitation  aaregurp1   aaregurp2   V=' v(lvlvvalvk) / max(v(aaregurgitationvalveratio),1n) * ( i(Vaaregurgitation) ^2 )^( <<lvlvvalvb>> / 2) * sgn( i(Vaaregurgitation) ) '
 aaaregurgitation  aaregurp2   lv    valve
-.else
-Xaaregurgitation  aaregurp2   lv  lvvalv   swdiode
-.endif
-.else
-Vaaregurgitation   lvvalv      aaregurp1   dc 0
-Vaaregurgitation2  lv          aaregurp2   dc 0
-.endif
 
-
-
-.if (rvregurgitation > 0)
 Vrvregurgitation  rv          rvregurp1   dc 0
-Brvregurgitation  rvregurp1   rvregurp2   V=' rvregurgitation * ( i(Vrvregurgitation) ^2 )^( <<raravalvb>> / 2) * sgn( i(Vrvregurgitation) ) '
-.elseif (rvregurgitationvalveratio > 0)
-Vrvregurgitation  rv          rvregurp1   dc 0
-Brvregurgitation  rvregurp1   rvregurp2   V=' <<raravalvk>> / rvregurgitationvalveratio * ( i(Vrvregurgitation) ^2 )^( <<raravalvb>> / 2) * sgn( i(Vrvregurgitation) ) '
-.if (switchvalve==0)
+Brvregurgitation  rvregurp1   rvregurp2   V=' v(raravalvk) / max(v(rvregurgitationvalveratio),1n) * ( i(Vrvregurgitation) ^2 )^( <<raravalvb>> / 2) * sgn( i(Vrvregurgitation) ) '
 arvregurgitation  rvregurp2   ravalvp1    valve
-.else
-Xrvregurgitation  rvregurp2   ravalvp1  rv  swdiode
-.endif
-.else
-Vrvregurgitation  rv          rvregurp1     dc 0
-Vrvregurgitation2 ravalvp1    rvregurp2     dc 0
-.endif
 
-
-.if (pa1regurgitation > 0)
 Vpa1regurgitation  rvvalv       pa1regurp1   dc 0
-Bpa1regurgitation  pa1regurp1   pa1regurp2   V=' pa1regurgitation * ( i(Vpa1regurgitation) ^2 )^( <<rvrvvalvb>> / 2) * sgn( i(Vpa1regurgitation) ) '
-.elseif (pa1regurgitationvalveratio > 0)
-Vpa1regurgitation  rvvalv       pa1regurp1   dc 0
-Bpa1regurgitation  pa1regurp1   pa1regurp2   V=' <<rvrvvalvk>> / pa1regurgitationvalveratio * ( i(Vpa1regurgitation) ^2 )^( <<rvrvvalvb>> / 2) * sgn( i(Vpa1regurgitation) ) '
-.if (switchvalve==0)
+Bpa1regurgitation  pa1regurp1   pa1regurp2   V=' v(rvrvvalvk) / max(v(pa1regurgitationvalveratio),1n) * ( i(Vpa1regurgitation) ^2 )^( <<rvrvvalvb>> / 2) * sgn( i(Vpa1regurgitation) ) '
 apa1regurgitation  pa1regurp2   ravalvp1    valve
-.else
-Xpa1regurgitation  pa1regurp2   rv   rvvalv  swdiode
-.endif
-.else
-Vpa1regurgitation  rvvalv   pa1regurp1     dc 0
-Vpa1regurgitation2 rv       pa1regurp2     dc 0
-.endif
-
 
 
 Caa   aa    gnd    <<aac>>    
@@ -257,13 +312,9 @@ Xheivc    he    ivc    vein  rval=<<heivcr>>    lval=<<heivcl>>
 Xivcra    ivc   ra     vein  rval=<<ivcrar>>    lval=<<ivcral>>
 
 Xda       pa2   ao2p1    vein  rval=<<dar>>    lval=<<dal>>
-Vda  ao2p1 ao2p2 dc 0
-Bda  ao2p2 ao2 V=' <<dak>> * ( i(Vda) ^2 )^( <<dab>> / 2) * sgn( i(Vda) ) '
 Xdv       uv    ivcp1    vein  rval=<<dvr>>    lval=<<dvl>>
-Vdv  ivcp1 ivcp2 dc 0
-Bdv  ivcp2 ivc V=' <<dvk>> * ( i(Vdv) ^2 )^( <<dvb>> / 2) * sgn( i(Vdv) ) '
 Xfo       ivc   fovalvp1 vein  rval=<<for>>    lval=<<fol>>
-Vfo  fovalvp1 fovalvp2 dc 0
+
 
 .options savecurrents
 
@@ -277,6 +328,6 @@ set controlswait
 set filetype=ascii
 set wr_vecnames
 run
-wrdata <<outfile>> v(lv) v(lvvol) v(la) v(rv) v(ra) v(pa1) v(aa) v(lavalvp1) v(lvvalv) i(Vlvprobe) v(phasetime) v(rvvol) i(Vlalavalv) i(Vlvlvvalv) i(Vlvregurgitation) v(lvregurp2) v(lvvalvp2) i(Vrvprobe)
+wrdata <<outfile>> v(lv) v(lvvol) v(la) v(rv) v(ra) v(pa1) v(aa) v(lavalvp1) v(lvvalv) i(Vlvprobe) v(lvphasetime) v(rvvol) i(Vlalavalv) i(Vlvlvvalv) i(Vlvregurgitation) v(lvregurp2) v(lvvalvp2) i(Vrvprobe)
 .endc 
 .end
