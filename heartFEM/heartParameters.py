@@ -312,6 +312,11 @@ class heartParameters(dict):
             self['rvregurgevalveratio']=-1
             self['pa1regurgevalveratio']=-1
             
+            self['lasourcemode']=0
+            self['rasourcemode']=0
+            self['lvsourcemode']=4
+            self['rvsourcemode']=1
+            
             self['ES_time']=None
             self['vla0']=None
             self['vra0']=None
