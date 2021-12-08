@@ -307,15 +307,10 @@ class heartParameters(dict):
             self['lalavalvb'] =2.
             self['lvlvvalvb'] =2.
             
-            self['lvregurger']=-1
             self['lvregurgevalveratio']=-1
-            self['aaregurger']=-1
             self['aaregurgevalveratio']=-1
-            self['rvregurger']=-1
             self['rvregurgevalveratio']=-1
-            self['pa1regurger']=-1
             self['pa1regurgevalveratio']=-1
-            self['switchvalve']=0
             
             self['ES_time']=None
             self['vla0']=None
