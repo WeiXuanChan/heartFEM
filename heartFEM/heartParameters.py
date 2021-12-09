@@ -59,7 +59,7 @@ WindkesselComponents=['lv','la','rv','ra','aa','ao1','ao2','ao3','ao4','br','ca'
 WindkessellinkComponents=['aaao1','ao1ao2','ao2ao3','ao3ao4','pa1pa2','pa2lung','da','ao1ca','cabr','brsvc','ao1ub','ubsvc','ao3he','ao3inte','intehe','ao3kid','kidivc','ao4plac','placuv','ao4leg','legivc','uvhe','heivc','dv','svcra','ivcra','lungla','fo','raravalv','lalavalv','lvlvvalv','rvrvvalv']
 defaultAgeScalePower={'defaultr':-1.,'pa2lungr':-1.2,'lunglar':-1.2,'cabrr':-1.1,'brsvcr':-1.1,'dvr':-0.55,
                       'defaultl':-0.33,
-                      'defaultc':1.33,'brc':1.471,'lungc':1.6,'ra':0.5,'la':0.5,
+                      'defaultc':1.33,'brc':1.471,'lungc':1.6,'rac':0.5,'lac':0.5,
                       'defaultk':0.,'fok':-0.6,'dak': -2.5,'dvk':-0.88,'raravalvk':-1.33,'rvrvvalvk':-1.33,'lalavalvk':-1.33,'lvlvvalvk':-1.33,
                       'defaultb':0.}
 defaultAdjustmentToScaling={'r_scale':1.21,'c_scale':0.27,'C_adj':1./1.33,'R_adj':-0.58/-1.}
