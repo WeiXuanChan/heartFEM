@@ -92,7 +92,7 @@ def createLVcircuit(casename,paramDict,stepTime=10,skipVariableList=None,verbose
             os.system(cmd)
     if "rvfuncarg" not in skipVariableList:
         for n in range(4):
-            if n<int(len(paramDict['rvfuncarg'])/2)):
+            if n<int(len(paramDict['rvfuncarg'])/2):
                 suffixDict_ind=max(-5,min(4,int(np.floor(np.log10(abs(paramDict[paramDict['rvfuncarg'][n*2]]))/3.))))
                 rvfuncarg='{:10.6f}'.format(paramDict[paramDict['rvfuncarg'][n*2]]/(1000.**suffixDict_ind))+suffixDict[suffixDict_ind]
                 cmd = "sed -i.bak s/'<<rvuamp"+str(n+1)+">>'/'" + rvfuncarg + "'/g " + cirfilename
