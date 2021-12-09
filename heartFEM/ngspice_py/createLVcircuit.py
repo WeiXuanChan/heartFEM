@@ -80,9 +80,6 @@ def createLVcircuit(casename,paramDict,stepTime=10,skipVariableList=None,verbose
                 cmd = "sed -i.bak s/'<<"+side+tempstr+">>'/'" + '{:10.6f}'.format(paramDict[side+tempstr]) + "'/g " + cirfilename
                 os.system(cmd)
     for valve in ['lv','rv','aa','pa1']:
-        if valve+"regurger" not in skipVariableList:
-            cmd = "sed -i.bak s/'<<"+valve+"regurger>>'/'" + str(paramDict[valve+"regurger"]) + "'/g " + cirfilename
-            os.system(cmd)
         if valve+"regurgevalveratio" not in skipVariableList:
             cmd = "sed -i.bak s/'<<"+valve+"regurgevalveratio>>'/'" + str(paramDict[valve+"regurgevalveratio"]) + "'/g " + cirfilename
             os.system(cmd)
