@@ -85,7 +85,7 @@ def createLVcircuit(casename,paramDict,stepTime=10,skipVariableList=None,verbose
             os.system(cmd)
     for cavity in ['la','ra','lv','rv']:
         if cavity+'sourcemode' not in skipVariableList and cavity!='lv':
-            cmd = "sed -i.bak s/'<<"+cavity+"sourcemode>>'/'" + paramDict[cavity+"sourcemode"] + "'/g " + cirfilename
+            cmd = "sed -i.bak s/'<<"+cavity+"sourcemode>>'/'" + str(paramDict[cavity+"sourcemode"]) + "'/g " + cirfilename
             os.system(cmd)
         if cavity+"timetopeaktension" not in skipVariableList:
             cmd = "sed -i.bak s/'<<"+cavity+"timetopeaktension>>'/'" + str(paramDict['t0'])+ "m'/g " + cirfilename
