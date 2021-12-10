@@ -42,7 +42,7 @@ Vrvprobe rv    rvgnd dc 0
 
 .if (lasourcemode == 0)
 Cla    lagnd   lagnd2   <<lac>> 
-Elau   lagnd2  gnd      vol = 'cossq( v(timecyclic) ,<<laamp>>,<<lapeaktime>>,<<lawidth>>,heartperiod)'
+Elau   lagnd2  gnd      vol = 'cossq( v(timecyclic) ,<<laamp>>,<<lapeaktime>>,<<lawidth>>,v(heartperiod))'
 .elif (lasourcemode == 1)
 Glau1   lagnd       gnd   cur = '<<lauamp1>> * sin(manmod(v(cumulativeheartphase),2*PI) +       <<lauphase1>>/180*PI)'
 Glau2   lagnd       gnd   cur = '<<lauamp2>> * sin(manmod(v(cumulativeheartphase),PI) * 2 +     <<lauphase2>>/180*PI)'
@@ -86,7 +86,7 @@ alau1 lavol laphasetime %v(lagenerator1) lautabmod
 
 .if (rasourcemode == 0)
 Cra    ragnd   ragnd2   <<rac>> 
-Erau   ragnd2  gnd      vol = 'cossq( v(timecyclic) ,<<raamp>>,<<rapeaktime>>,<<rawidth>>,heartperiod)'
+Erau   ragnd2  gnd      vol = 'cossq( v(timecyclic) ,<<raamp>>,<<rapeaktime>>,<<rawidth>>,v(heartperiod))'
 .elif (rasourcemode == 1)
 Grau1   ragnd       gnd   cur = '<<rauamp1>> * sin(manmod(v(cumulativeheartphase),2*PI) +       <<rauphase1>>/180*PI)'
 Grau2   ragnd       gnd   cur = '<<rauamp2>> * sin(manmod(v(cumulativeheartphase),PI) * 2 +     <<rauphase2>>/180*PI)'
@@ -123,7 +123,7 @@ Btime2 raphasetime gnd V =  (v(timecyclic) > v(raactivepeaktime)) ? (v(raactivep
 
 .if (lvsourcemode == 0)
 Clv    lvgnd   lvgnd2   <<lvc>> 
-Elvu   lvgnd2  gnd      vol = 'cossq( v(timecyclic) ,<<lvamp>>,<<lvpeaktime>>,<<lvwidth>>,heartperiod)'
+Elvu   lvgnd2  gnd      vol = 'cossq( v(timecyclic) ,<<lvamp>>,<<lvpeaktime>>,<<lvwidth>>,v(heartperiod))'
 .elif (lvsourcemode == 1)
 Glvu1   lvgnd       gnd   cur = '<<lvuamp1>> * sin(manmod(v(cumulativeheartphase),2*PI) +       <<lvuphase1>>/180*PI)'
 Glvu2   lvgnd       gnd   cur = '<<lvuamp2>> * sin(manmod(v(cumulativeheartphase),PI) * 2 +     <<lvuphase2>>/180*PI)'
@@ -160,7 +160,7 @@ Btime2 lvphasetime gnd V =  (v(timecyclic) > v(lvactivepeaktime)) ? (v(lvactivep
 
 .if (rvsourcemode == 0)
 Crv    rvgnd   rvgnd2   <<rvc>> 
-Ervu   rvgnd2  gnd      vol = 'cossq( v(timecyclic) ,<<rvamp>>,<<rvpeaktime>>,<<rvwidth>>,heartperiod)'
+Ervu   rvgnd2  gnd      vol = 'cossq( v(timecyclic) ,<<rvamp>>,<<rvpeaktime>>,<<rvwidth>>,v(heartperiod))'
 .elif (rvsourcemode == 1)
 Grvu1   rvgnd       gnd   cur = '<<rvuamp1>> * sin(manmod(v(cumulativeheartphase),2*PI) +       <<rvuphase1>>/180*PI)'
 Grvu2   rvgnd       gnd   cur = '<<rvuamp2>> * sin(manmod(v(cumulativeheartphase),PI) * 2 +     <<rvuphase2>>/180*PI)'
