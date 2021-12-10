@@ -317,6 +317,9 @@ class heartParameters(dict):
             self['rvsourcemode']=1
             
             for cavity in ["LA","RA","LV","RV"]:
+                self[cavity.lower()+'amp']=0
+                self[cavity.lower()+'peaktime']=1
+                self[cavity.lower()+'width']=1
                 for n in range(1,5):
                     self[cavity.lower()+'uamp'+str(n)]=0
                     self[cavity.lower()+'uphase'+str(n)]=0
