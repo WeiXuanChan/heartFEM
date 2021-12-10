@@ -319,7 +319,7 @@ class heartParameters(dict):
             for cavity in ["LA","RA","LV","RV"]:
                 for n in range(4):
                     self[cavity.lower()+'uamp'+str(n)]=0
-                    self[cavity.lower()+'uamp'+str(n)]=0
+                    self[cavity.lower()+'uphase'+str(n)]=0
             
             self['ES_time']=None
             self['vla0']=None
