@@ -44,10 +44,10 @@ def simLVcircuit(casename,stopTime,lvufile,lvinputvar='V',initLAvol=0,initRAvol=
     if lvinputvar=='i' or lvinputvar=='I':
         cmd = "sed -i.bak s/'<<lvinputvar>>'/'I'/g " + cirtempfilename
         os.system(cmd)
-        cmd = "sed -i.bak s/'Vlvu'/'*Vlvu'/g " + cirtempfilename
-        os.system(cmd)
-        cmd = "sed -i.bak s/'*Elvu'/'Elvu'/g " + cirtempfilename
-        os.system(cmd)
+        #cmd = "sed -i.bak s/'Vlvu'/'*Vlvu'/g " + cirtempfilename
+        #os.system(cmd)
+        #cmd = "sed -i.bak s/'*Elvu'/'Elvu'/g " + cirtempfilename
+        #os.system(cmd)
     else:
         cmd = "sed -i.bak s/'<<lvinputvar>>'/'V'/g " + cirtempfilename
         os.system(cmd)
