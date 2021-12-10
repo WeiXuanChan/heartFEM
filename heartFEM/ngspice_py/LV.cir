@@ -42,7 +42,7 @@ Vrvprobe rv    rvgnd dc 0
 
 .if (lasourcemode == 0)
 Cla    lagnd   lagnd2   <<lac>> 
-Elau   lagnd2  gnd      vol = 'cossq( v(timecyclic) ,<<laamp>>,<<lapeaktime>>,<<lawidth>>)'
+Elau   lagnd2  gnd      vol = 'cossq( v(timecyclic) ,<<laamp>>,<<lapeaktime>>,<<lawidth>>,heartperiod)'
 .elif (lasourcemode == 1)
 Glau1   lagnd       gnd   cur = '<<lauamp1>> * sin(manmod(v(cumulativeheartphase),2*PI) +       <<lauphase1>>/180*PI)'
 Glau2   lagnd       gnd   cur = '<<lauamp2>> * sin(manmod(v(cumulativeheartphase),PI) * 2 +     <<lauphase2>>/180*PI)'
@@ -62,17 +62,17 @@ alau1 lavol laphasetime %v(lagenerator1) lautabmod
 .if (lasourcemode == 3)
 Vpasslaphasetime laphasetime timecyclic dc 0
 .else
-Bestphase laestphase gnd V = v(timecyclic)/laactivepeaktime
-Blarisecurrent gnd lacurrentphase I =  ((v(timecyclic) <= laactivepeaktime) ? (v(lacurrentphase) >= (1 - (3 * <<stepTime>> * v(larisetemp)))  ? (1-v(lacurrentphase))/(3 * <<stepTime>> * v(larisetemp))*v(larisetemp) : v(larisetemp) ) : 0)
-Blarisetemp larisetemp gnd V = 1/laactivepeaktime*10
-Blafallcurrent lacurrentphase gnd I = (v(timecyclic) < laactivepeaktime) ? 0 : v(lafalltemp)
+Bestphase laestphase gnd V = v(timecyclic)/v(laactivepeaktime)
+Blarisecurrent gnd lacurrentphase I =  ((v(timecyclic) <= v(laactivepeaktime)) ? (v(lacurrentphase) >= (1 - (3 * <<stepTime>> * v(larisetemp)))  ? (1-v(lacurrentphase))/(3 * <<stepTime>> * v(larisetemp))*v(larisetemp) : v(larisetemp) ) : 0)
+Blarisetemp larisetemp gnd V = 1/v(laactivepeaktime)*10
+Blafallcurrent lacurrentphase gnd I = (v(timecyclic) < v(laactivepeaktime)) ? 0 : v(lafalltemp)
 Blafalltemp lafalltemp gnd V =  1/v(latr)
 alapressgrad  lacurrentphase gnd latrcap
 .model latrcap capacitor (c=1 ic=0)
 alatr gnd lavol %v(latr) lautabtrmod
 .model lautabtrmod table2d (offset=0.0 gain=1 order=3 file="<<latrtablefile>>")
 Blaphase laphase gnd V = max(0,min(1,v(lacurrentphase)))
-Btime2 laphasetime gnd V =  (v(timecyclic) > laactivepeaktime) ? (laactivepeaktime + v(latr) * (1-v(lacurrentphase))) : v(timecyclic)
+Btime2 laphasetime gnd V =  (v(timecyclic) > v(laactivepeaktime)) ? (v(laactivepeaktime) + v(latr) * (1-v(lacurrentphase))) : v(timecyclic)
 .endif
 .else
 alau0 gnd lavol %v(lagenerator0) lautabmod0
@@ -86,7 +86,7 @@ alau1 lavol laphasetime %v(lagenerator1) lautabmod
 
 .if (rasourcemode == 0)
 Cra    ragnd   ragnd2   <<rac>> 
-Erau   ragnd2  gnd      vol = 'cossq( v(timecyclic) ,<<raamp>>,<<rapeaktime>>,<<rawidth>>)'
+Erau   ragnd2  gnd      vol = 'cossq( v(timecyclic) ,<<raamp>>,<<rapeaktime>>,<<rawidth>>,heartperiod)'
 .elif (rasourcemode == 1)
 Grau1   ragnd       gnd   cur = '<<rauamp1>> * sin(manmod(v(cumulativeheartphase),2*PI) +       <<rauphase1>>/180*PI)'
 Grau2   ragnd       gnd   cur = '<<rauamp2>> * sin(manmod(v(cumulativeheartphase),PI) * 2 +     <<rauphase2>>/180*PI)'
@@ -106,24 +106,24 @@ arau1 ravol raphasetime %v(ragenerator1) rautabmod
 .if (rasourcemode == 3)
 Vpassraphasetime raphasetime timecyclic dc 0
 .else
-Bestphase raestphase gnd V = v(timecyclic)/raactivepeaktime
-Brarisecurrent gnd racurrentphase I =  ((v(timecyclic) <= raactivepeaktime) ? (v(racurrentphase) >= (1 - (3 * <<stepTime>> * v(rarisetemp)))  ? (1-v(racurrentphase))/(3 * <<stepTime>> * v(rarisetemp))*v(rarisetemp) : v(rarisetemp) ) : 0)
-Brarisetemp rarisetemp gnd V = 1/raactivepeaktime*10
-Brafallcurrent racurrentphase gnd I = (v(timecyclic) < raactivepeaktime) ? 0 : v(rafalltemp)
+Bestphase raestphase gnd V = v(timecyclic)/v(raactivepeaktime)
+Brarisecurrent gnd racurrentphase I =  ((v(timecyclic) <= v(raactivepeaktime)) ? (v(racurrentphase) >= (1 - (3 * <<stepTime>> * v(rarisetemp)))  ? (1-v(racurrentphase))/(3 * <<stepTime>> * v(rarisetemp))*v(rarisetemp) : v(rarisetemp) ) : 0)
+Brarisetemp rarisetemp gnd V = 1/v(raactivepeaktime)*10
+Brafallcurrent racurrentphase gnd I = (v(timecyclic) < v(raactivepeaktime)) ? 0 : v(rafalltemp)
 Brafalltemp rafalltemp gnd V =  1/v(ratr)
 arapressgrad  racurrentphase gnd ratrcap
 .model ratrcap capacitor (c=1 ic=0)
 aratr gnd ravol %v(ratr) rautabtrmod
 .model rautabtrmod table2d (offset=0.0 gain=1 order=3 file="<<ratrtablefile>>")
 Braphase raphase gnd V = max(0,min(1,v(racurrentphase)))
-Btime2 raphasetime gnd V =  (v(timecyclic) > raactivepeaktime) ? (raactivepeaktime + v(ratr) * (1-v(racurrentphase))) : v(timecyclic)
+Btime2 raphasetime gnd V =  (v(timecyclic) > v(raactivepeaktime)) ? (v(raactivepeaktime) + v(ratr) * (1-v(racurrentphase))) : v(timecyclic)
 .endif
 .endif
 .endif
 
 .if (lvsourcemode == 0)
 Clv    lvgnd   lvgnd2   <<lvc>> 
-Elvu   lvgnd2  gnd      vol = 'cossq( v(timecyclic) ,<<lvamp>>,<<lvpeaktime>>,<<lvwidth>>)'
+Elvu   lvgnd2  gnd      vol = 'cossq( v(timecyclic) ,<<lvamp>>,<<lvpeaktime>>,<<lvwidth>>,heartperiod)'
 .elif (lvsourcemode == 1)
 Glvu1   lvgnd       gnd   cur = '<<lvuamp1>> * sin(manmod(v(cumulativeheartphase),2*PI) +       <<lvuphase1>>/180*PI)'
 Glvu2   lvgnd       gnd   cur = '<<lvuamp2>> * sin(manmod(v(cumulativeheartphase),PI) * 2 +     <<lvuphase2>>/180*PI)'
@@ -143,24 +143,24 @@ alvu1 lvvol lvphasetime %v(lvgenerator1) lvutabmod
 .if (lvsourcemode == 3)
 Vpasslvphasetime lvphasetime timecyclic dc 0
 .else
-Bestphase lvestphase gnd V = v(timecyclic)/lvactivepeaktime
-Blvrisecurrent gnd lvcurrentphase I =  ((v(timecyclic) <= lvactivepeaktime) ? (v(lvcurrentphase) >= (1 - (3 * <<stepTime>> * v(lvrisetemp)))  ? (1-v(lvcurrentphase))/(3 * <<stepTime>> * v(lvrisetemp))*v(lvrisetemp) : v(lvrisetemp) ) : 0)
-Blvrisetemp lvrisetemp gnd V = 1/lvactivepeaktime*10
-Blvfallcurrent lvcurrentphase gnd I = (v(timecyclic) < lvactivepeaktime) ? 0 : v(lvfalltemp)
+Bestphase lvestphase gnd V = v(timecyclic)/v(lvactivepeaktime)
+Blvrisecurrent gnd lvcurrentphase I =  ((v(timecyclic) <= v(lvactivepeaktime)) ? (v(lvcurrentphase) >= (1 - (3 * <<stepTime>> * v(lvrisetemp)))  ? (1-v(lvcurrentphase))/(3 * <<stepTime>> * v(lvrisetemp))*v(lvrisetemp) : v(lvrisetemp) ) : 0)
+Blvrisetemp lvrisetemp gnd V = 1/v(lvactivepeaktime)*10
+Blvfallcurrent lvcurrentphase gnd I = (v(timecyclic) < v(lvactivepeaktime)) ? 0 : v(lvfalltemp)
 Blvfalltemp lvfalltemp gnd V =  1/v(lvtr)
 alvpressgrad  lvcurrentphase gnd lvtrcap
 .model lvtrcap capacitor (c=1 ic=0)
 alvtr gnd lvvol %v(lvtr) lvutabtrmod
 .model lvutabtrmod table2d (offset=0.0 gain=1 order=3 file="<<lvtrtablefile>>")
 Blvphase lvphase gnd V = max(0,min(1,v(lvcurrentphase)))
-Btime2 lvphasetime gnd V =  (v(timecyclic) > lvactivepeaktime) ? (lvactivepeaktime + v(lvtr) * (1-v(lvcurrentphase))) : v(timecyclic)
+Btime2 lvphasetime gnd V =  (v(timecyclic) > v(lvactivepeaktime)) ? (v(lvactivepeaktime) + v(lvtr) * (1-v(lvcurrentphase))) : v(timecyclic)
 .endif
 .endif
 .endif
 
 .if (rvsourcemode == 0)
 Crv    rvgnd   rvgnd2   <<rvc>> 
-Ervu   rvgnd2  gnd      vol = 'cossq( v(timecyclic) ,<<rvamp>>,<<rvpeaktime>>,<<rvwidth>>)'
+Ervu   rvgnd2  gnd      vol = 'cossq( v(timecyclic) ,<<rvamp>>,<<rvpeaktime>>,<<rvwidth>>,heartperiod)'
 .elif (rvsourcemode == 1)
 Grvu1   rvgnd       gnd   cur = '<<rvuamp1>> * sin(manmod(v(cumulativeheartphase),2*PI) +       <<rvuphase1>>/180*PI)'
 Grvu2   rvgnd       gnd   cur = '<<rvuamp2>> * sin(manmod(v(cumulativeheartphase),PI) * 2 +     <<rvuphase2>>/180*PI)'
@@ -180,17 +180,17 @@ arvu1 rvvol rvphasetime %v(rvgenerator1) rvutabmod
 .if (rvsourcemode == 3)
 Vpassrvphasetime rvphasetime timecyclic dc 0
 .else
-Bestphase rvestphase gnd V = v(timecyclic)/rvactivepeaktime
-Brvrisecurrent gnd rvcurrentphase I =  ((v(timecyclic) <= rvactivepeaktime) ? (v(rvcurrentphase) >= (1 - (3 * <<stepTime>> * v(rvrisetemp)))  ? (1-v(rvcurrentphase))/(3 * <<stepTime>> * v(rvrisetemp))*v(rvrisetemp) : v(rvrisetemp) ) : 0)
-Brvrisetemp rvrisetemp gnd V = 1/rvactivepeaktime*10
-Brvfallcurrent rvcurrentphase gnd I = (v(timecyclic) < rvactivepeaktime) ? 0 : v(rvfalltemp)
+Bestphase rvestphase gnd V = v(timecyclic)/v(rvactivepeaktime)
+Brvrisecurrent gnd rvcurrentphase I =  ((v(timecyclic) <= v(rvactivepeaktime)) ? (v(rvcurrentphase) >= (1 - (3 * <<stepTime>> * v(rvrisetemp)))  ? (1-v(rvcurrentphase))/(3 * <<stepTime>> * v(rvrisetemp))*v(rvrisetemp) : v(rvrisetemp) ) : 0)
+Brvrisetemp rvrisetemp gnd V = 1/v(rvactivepeaktime)*10
+Brvfallcurrent rvcurrentphase gnd I = (v(timecyclic) < v(rvactivepeaktime)) ? 0 : v(rvfalltemp)
 Brvfalltemp rvfalltemp gnd V =  1/v(rvtr)
 arvpressgrad  rvcurrentphase gnd rvtrcap
 .model rvtrcap capacitor (c=1 ic=0)
 arvtr gnd rvvol %v(rvtr) rvutabtrmod
 .model rvutabtrmod table2d (offset=0.0 gain=1 order=3 file="<<rvtrtablefile>>")
 Brvphase rvphase gnd V = max(0,min(1,v(rvcurrentphase)))
-Btime2 rvphasetime gnd V =  (v(timecyclic) > rvactivepeaktime) ? (rvactivepeaktime + v(rvtr) * (1-v(rvcurrentphase))) : v(timecyclic)
+Btime2 rvphasetime gnd V =  (v(timecyclic) > v(rvactivepeaktime)) ? (v(rvactivepeaktime) + v(rvtr) * (1-v(rvcurrentphase))) : v(timecyclic)
 .endif
 .endif
 .endif
