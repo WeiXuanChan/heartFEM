@@ -112,17 +112,17 @@ def simLVcircuit(casename,stopTime,lvufile,lvinputvar='V',initLAvol=0,initRAvol=
         os.system(cmd)
         cmd = "sed -i.bak s/'<<lvutablebasefile>>'/'temp_" +lvufilename[:-4]+'base.txt' + "'/g " + cirtempfilename
         os.system(cmd)
-        cmd = "sed -i.bak s/'alvu1'/'*alvu1'/g " + cirtempfilename
-        os.system(cmd)
-        cmd = "sed -i.bak s/'*alvu20'/'alvu20'/g " + cirtempfilename
-        os.system(cmd)
-        cmd = "sed -i.bak s/'*Blvu2'/'Blvu2'/g " + cirtempfilename
-        os.system(cmd)
+        #cmd = "sed -i.bak s/'alvu1'/'*alvu1'/g " + cirtempfilename
+        #os.system(cmd)
+        #cmd = "sed -i.bak s/'*alvu20'/'alvu20'/g " + cirtempfilename
+        #os.system(cmd)
+        #cmd = "sed -i.bak s/'*Blvu2'/'Blvu2'/g " + cirtempfilename
+        #os.system(cmd)
         
-        cmd = "sed -i.bak s/'.model pwl_input'/'*.model pwl_input'/g " + cirtempfilename
-        os.system(cmd)
-        cmd = "sed -i.bak s/'*.model lvutabmod'/'.model lvutabmod'/g " + cirtempfilename
-        os.system(cmd)
+        #cmd = "sed -i.bak s/'.model pwl_input'/'*.model pwl_input'/g " + cirtempfilename
+        #os.system(cmd)
+        #cmd = "sed -i.bak s/'*.model lvutabmod'/'.model lvutabmod'/g " + cirtempfilename
+        #os.system(cmd)
         if vla0 is None or vra0 is None:
                 data0=np.loadtxt(os.getcwd()+'/temp_'+lvufilename[:-4]+'base.txt',skiprows=10)
                 x0=np.loadtxt(os.getcwd()+'/temp_'+lvufilename[:-4]+'base.txt',skiprows=8,max_rows=1)
@@ -137,10 +137,10 @@ def simLVcircuit(casename,stopTime,lvufile,lvinputvar='V',initLAvol=0,initRAvol=
         if lvinputvar=='table2dtrackrelaxphase':
             cmd = "sed -i.bak s/'<<lvsourcemode>>'/'4'/g " + cirtempfilename
             os.system(cmd)
-            cmd = "sed -i.bak s/'*alvu22'/'alvu22'/g " + cirtempfilename
-            os.system(cmd)
-            cmd = "sed -i.bak s/'PARAM trackrelaxphase = 0'/'PARAM trackrelaxphase = 1'/g " + cirtempfilename
-            os.system(cmd)
+            #cmd = "sed -i.bak s/'*alvu22'/'alvu22'/g " + cirtempfilename
+            #os.system(cmd)
+            #cmd = "sed -i.bak s/'PARAM trackrelaxphase = 0'/'PARAM trackrelaxphase = 1'/g " + cirtempfilename
+            #os.system(cmd)
             cmd = "cp "+lvufile[:-4]+'tr.txt'+" " +'./temp_'+lvufilename[:-4]+'tr.txt'
             os.system(cmd)
             cmd = "sed -i.bak s/'<<lvtrtablefile>>'/'temp_"+lvufilename[:-4]+"tr.txt'/g " + cirtempfilename
@@ -148,8 +148,8 @@ def simLVcircuit(casename,stopTime,lvufile,lvinputvar='V',initLAvol=0,initRAvol=
         else:
             cmd = "sed -i.bak s/'<<lvsourcemode>>'/'3'/g " + cirtempfilename
             os.system(cmd)
-            cmd = "sed -i.bak s/'*alvu21'/'alvu21'/g " + cirtempfilename
-            os.system(cmd)
+            #cmd = "sed -i.bak s/'*alvu21'/'alvu21'/g " + cirtempfilename
+            #os.system(cmd)
 
     cmd = "sed -i.bak s/'<<lainitvol>>'/'"+str(initLAvol)+"'/g " + cirtempfilename
     os.system(cmd)
