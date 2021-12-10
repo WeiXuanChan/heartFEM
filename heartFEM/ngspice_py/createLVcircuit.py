@@ -90,6 +90,13 @@ def createLVcircuit(casename,paramDict,stepTime=10,skipVariableList=None,verbose
         if cavity+"timetopeaktension" not in skipVariableList:
             cmd = "sed -i.bak s/'<<"+cavity+"timetopeaktension>>'/'" + str(paramDict['t0'])+ "m'/g " + cirfilename
             os.system(cmd)
+        for n in range(1,5):
+            if cavity+"uamp"+str(n) not in skipVariableList:
+                cmd = "sed -i.bak s/'<<"+cavity+"uamp"+str(n)+">>'/'" + str(paramDict[cavity+"uamp"+str(n)])+ "m'/g " + cirfilename
+                os.system(cmd)
+            if cavity+"uphase"+str(n) not in skipVariableList:
+                cmd = "sed -i.bak s/'<<"+cavity+"uphase"+str(n)+">>'/'" + str(paramDict[cavity+"uphase"+str(n)])+ "m'/g " + cirfilename
+                os.system(cmd)
     if "rvfuncarg" not in skipVariableList:
         for n in range(4):
             if n<int(len(paramDict['rvfuncarg'])/2):
