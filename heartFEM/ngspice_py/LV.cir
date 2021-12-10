@@ -10,8 +10,8 @@
 .PARAM rvsourcemode = <<rvsourcemode>>
 
 .func manmod(shorttime,period) {shorttime - floor(shorttime / period) * period}
-.func disfrompeak(xtime,peaktime,width) {min( abs( xtime - peaktime) , period - abs( xtime - peaktime))}
-.func cossq(xtime,amp,peaktime,width) {amp * cos( PI * disfrompeak( xtime , peaktime , width ) / width)^2}
+.func disfrompeak(xtime,peaktime,width,period) {min( abs( xtime - peaktime) , period - abs( xtime - peaktime))}
+.func cossq(xtime,amp,peaktime,width,period) {amp * cos( PI * disfrompeak( xtime , peaktime , width,period ) / width)^2}
 
 .model valve sidiode(Roff=10k Ron=1m Rrev=10 Vfwd=0.1 Vrev=1k Revepsilon=0.2 Epsilon=0.2)
 
