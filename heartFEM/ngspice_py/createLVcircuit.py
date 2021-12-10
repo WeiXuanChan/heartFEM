@@ -74,11 +74,6 @@ def createLVcircuit(casename,paramDict,stepTime=10,skipVariableList=None,verbose
     if "cycle" not in skipVariableList:
         cmd = "sed -i.bak s/'<<cycle>>'/'" + '{:10.6f}'.format(paramDict['BCL']) + "m'/g " + cirfilename
         os.system(cmd)
-    for side in ['l','r']:
-        for tempstr in ['aamp','apeaktime','awidth']:
-            if side+tempstr not in skipVariableList:
-                cmd = "sed -i.bak s/'<<"+side+tempstr+">>'/'" + '{:10.6f}'.format(paramDict[side+tempstr]) + "'/g " + cirfilename
-                os.system(cmd)
     for valve in ['lv','rv','aa','pa1']:
         if valve+"regurgevalveratio" not in skipVariableList:
             cmd = "sed -i.bak s/'<<"+valve+"regurgevalveratio>>'/'" + str(paramDict[valve+"regurgevalveratio"]) + "'/g " + cirfilename
@@ -90,6 +85,10 @@ def createLVcircuit(casename,paramDict,stepTime=10,skipVariableList=None,verbose
         if cavity+"timetopeaktension" not in skipVariableList:
             cmd = "sed -i.bak s/'<<"+cavity+"timetopeaktension>>'/'" + str(paramDict['t0'])+ "m'/g " + cirfilename
             os.system(cmd)
+        for tempstr in ['amp','peaktime','width']:
+            if cavity+tempstr not in skipVariableList:
+                cmd = "sed -i.bak s/'<<"+cavity+tempstr+">>'/'" + '{:10.6f}'.format(paramDict[cavity+tempstr]) + "'/g " + cirfilename
+                os.system(cmd)
         for n in range(1,5):
             if cavity+"uamp"+str(n) not in skipVariableList:
                 cmd = "sed -i.bak s/'<<"+cavity+"uamp"+str(n)+">>'/'" + str(paramDict[cavity+"uamp"+str(n)])+ "m'/g " + cirfilename
