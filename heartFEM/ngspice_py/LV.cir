@@ -43,18 +43,21 @@ Vrvprobe rv    rvgnd dc 0
 .if (lasourcemode == 0)
 Cla    lagnd   lagnd2   <<lac>> 
 Elau   lagnd2  gnd      vol = 'cossq( v(timecyclic) ,<<laamp>>,<<lapeaktime>>,<<lawidth>>,v(heartperiod))'
-.elif (lasourcemode == 1)
+Vpasslaphasetime laphasetime timecyclic dc 0
+.elseif (lasourcemode == 1)
 Glau1   lagnd       gnd   cur = '<<lauamp1>> * sin(manmod(v(cumulativeheartphase),2*PI) +       <<lauphase1>>/180*PI)'
 Glau2   lagnd       gnd   cur = '<<lauamp2>> * sin(manmod(v(cumulativeheartphase),PI) * 2 +     <<lauphase2>>/180*PI)'
 Glau3   lagnd       gnd   cur = '<<lauamp3>> * sin(manmod(v(cumulativeheartphase),PI*2/3) * 3 + <<lauphase3>>/180*PI)'
 Glau4   lagnd       gnd   cur = '<<lauamp4>> * sin(manmod(v(cumulativeheartphase),PI/2) * 4 +   <<lauphase4>>/180*PI)'
+Vpasslaphasetime laphasetime timecyclic dc 0
 .else
 Blau   lagnd   gnd  <<lainputvar>> = v(lagenerator0) + v(lagenerator1)
 .if (lasourcemode == 2)
 alau0 %v[lagenerator0] la_pwl_input
 .model la_pwl_input filesource (file="<<laufile>>" amploffset=[0] amplscale=[1] timeoffset=0 timescale=1 timerelative=false amplstep=false)
 Vlau1 lagenerator1   gnd  dc 0
-.elif (lasourcemode < 5)
+Vpasslaphasetime laphasetime timecyclic dc 0
+.elseif (lasourcemode < 5)
 alau0 gnd lavol %v(lagenerator0) lautabmod0
 .model lautabmod0 table2d (offset=0.0 gain=1 order=3 file="<<lautablebasefile>>")
 alau1 lavol laphasetime %v(lagenerator1) lautabmod
@@ -87,17 +90,20 @@ alau1 lavol laphasetime %v(lagenerator1) lautabmod
 .if (rasourcemode == 0)
 Cra    ragnd   ragnd2   <<rac>> 
 Erau   ragnd2  gnd      vol = 'cossq( v(timecyclic) ,<<raamp>>,<<rapeaktime>>,<<rawidth>>,v(heartperiod))'
-.elif (rasourcemode == 1)
+Vpassraphasetime raphasetime timecyclic dc 0
+.elseif (rasourcemode == 1)
 Grau1   ragnd       gnd   cur = '<<rauamp1>> * sin(manmod(v(cumulativeheartphase),2*PI) +       <<rauphase1>>/180*PI)'
 Grau2   ragnd       gnd   cur = '<<rauamp2>> * sin(manmod(v(cumulativeheartphase),PI) * 2 +     <<rauphase2>>/180*PI)'
 Grau3   ragnd       gnd   cur = '<<rauamp3>> * sin(manmod(v(cumulativeheartphase),PI*2/3) * 3 + <<rauphase3>>/180*PI)'
 Grau4   ragnd       gnd   cur = '<<rauamp4>> * sin(manmod(v(cumulativeheartphase),PI/2) * 4 +   <<rauphase4>>/180*PI)'
+Vpassraphasetime raphasetime timecyclic dc 0
 .else
 Brau   ragnd   gnd  <<rainputvar>> = v(ragenerator0) + v(ragenerator1)
 .if (rasourcemode == 2)
 arau0 %v[ragenerator0] ra_pwl_input
 .model ra_pwl_input filesource (file="<<raufile>>" amploffset=[0] amplscale=[1] timeoffset=0 timescale=1 timerelative=false amplstep=false)
 Vrau1 ragenerator1   gnd  dc 0
+Vpassraphasetime raphasetime timecyclic dc 0
 .else
 arau0 gnd ravol %v(ragenerator0) rautabmod0
 .model rautabmod0 table2d (offset=0.0 gain=1 order=3 file="<<rautablebasefile>>")
@@ -124,17 +130,20 @@ Btime2 raphasetime gnd V =  (v(timecyclic) > v(raactivepeaktime)) ? (v(raactivep
 .if (lvsourcemode == 0)
 Clv    lvgnd   lvgnd2   <<lvc>> 
 Elvu   lvgnd2  gnd      vol = 'cossq( v(timecyclic) ,<<lvamp>>,<<lvpeaktime>>,<<lvwidth>>,v(heartperiod))'
-.elif (lvsourcemode == 1)
+Vpasslvphasetime lvphasetime timecyclic dc 0
+.elseif (lvsourcemode == 1)
 Glvu1   lvgnd       gnd   cur = '<<lvuamp1>> * sin(manmod(v(cumulativeheartphase),2*PI) +       <<lvuphase1>>/180*PI)'
 Glvu2   lvgnd       gnd   cur = '<<lvuamp2>> * sin(manmod(v(cumulativeheartphase),PI) * 2 +     <<lvuphase2>>/180*PI)'
 Glvu3   lvgnd       gnd   cur = '<<lvuamp3>> * sin(manmod(v(cumulativeheartphase),PI*2/3) * 3 + <<lvuphase3>>/180*PI)'
 Glvu4   lvgnd       gnd   cur = '<<lvuamp4>> * sin(manmod(v(cumulativeheartphase),PI/2) * 4 +   <<lvuphase4>>/180*PI)'
+Vpasslvphasetime lvphasetime timecyclic dc 0
 .else
 Blvu   lvgnd   gnd  <<lvinputvar>> = v(lvgenerator0) + v(lvgenerator1)
 .if (lvsourcemode == 2)
 alvu0 %v[lvgenerator0] lv_pwl_input
 .model lv_pwl_input filesource (file="<<lvufile>>" amploffset=[0] amplscale=[1] timeoffset=0 timescale=1 timerelative=false amplstep=false)
 Vlvu1 lvgenerator1   gnd  dc 0
+Vpasslvphasetime lvphasetime timecyclic dc 0
 .else
 alvu0 gnd lvvol %v(lvgenerator0) lvutabmod0
 .model lvutabmod0 table2d (offset=0.0 gain=1 order=3 file="<<lvutablebasefile>>")
@@ -161,17 +170,20 @@ Btime2 lvphasetime gnd V =  (v(timecyclic) > v(lvactivepeaktime)) ? (v(lvactivep
 .if (rvsourcemode == 0)
 Crv    rvgnd   rvgnd2   <<rvc>> 
 Ervu   rvgnd2  gnd      vol = 'cossq( v(timecyclic) ,<<rvamp>>,<<rvpeaktime>>,<<rvwidth>>,v(heartperiod))'
-.elif (rvsourcemode == 1)
+Vpassrvphasetime rvphasetime timecyclic dc 0
+.elseif (rvsourcemode == 1)
 Grvu1   rvgnd       gnd   cur = '<<rvuamp1>> * sin(manmod(v(cumulativeheartphase),2*PI) +       <<rvuphase1>>/180*PI)'
 Grvu2   rvgnd       gnd   cur = '<<rvuamp2>> * sin(manmod(v(cumulativeheartphase),PI) * 2 +     <<rvuphase2>>/180*PI)'
 Grvu3   rvgnd       gnd   cur = '<<rvuamp3>> * sin(manmod(v(cumulativeheartphase),PI*2/3) * 3 + <<rvuphase3>>/180*PI)'
 Grvu4   rvgnd       gnd   cur = '<<rvuamp4>> * sin(manmod(v(cumulativeheartphase),PI/2) * 4 +   <<rvuphase4>>/180*PI)'
+Vpassrvphasetime rvphasetime timecyclic dc 0
 .else
 Brvu   rvgnd   gnd  <<rvinputvar>> = v(rvgenerator0) + v(rvgenerator1)
 .if (rvsourcemode == 2)
 arvu0 %v[rvgenerator0] rv_pwl_input
 .model rv_pwl_input filesource (file="<<rvufile>>" amploffset=[0] amplscale=[1] timeoffset=0 timescale=1 timerelative=false amplstep=false)
 Vrvu1 rvgenerator1   gnd  dc 0
+Vpassrvphasetime rvphasetime timecyclic dc 0
 .else
 arvu0 gnd rvvol %v(rvgenerator0) rvutabmod0
 .model rvutabmod0 table2d (offset=0.0 gain=1 order=3 file="<<rvutablebasefile>>")
