@@ -345,7 +345,6 @@ class LVclosed:
         self.defaultParameters['rvfunc']='fourier'+str(fourierTerms)
         self.defaultParameters['rvfuncarg']=[]
         for n in range(len(popt)):
-            self.defaultParameters['rvfuncarg'].append('rvfuncarg'+str(n))
             popt_temp=popt[n]
             if n%2==1:
                 if adjust_x!=0:
@@ -355,7 +354,7 @@ class LVclosed:
                 while popt_temp>np.pi:
                     popt_temp-=2.*np.pi
                 popt_temp*=180./np.pi
-            self.defaultParameters['rvfuncarg'+str(n)]=popt_temp
+            self.defaultParameters['rvfuncarg'].append(popt_temp)
         
     def scaleWinkessel(self,scaleDict,compstr=''):
         self.defaultParameters.scaleWinkessel(scaleDict,compstr=compstr)
