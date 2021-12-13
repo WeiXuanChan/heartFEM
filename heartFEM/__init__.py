@@ -342,8 +342,6 @@ class LVclosed:
             logger.info("Adjusted RVcurrentInflowFourier by "+str(adjust_x)+" radian")
         else:
             adjust_x=0.
-        self.defaultParameters['rvfunc']='fourier'+str(fourierTerms)
-        self.defaultParameters['rvfuncarg']=[]
         for n in range(len(popt)):
             popt_temp=popt[n]
             if n%2==1:
@@ -354,7 +352,9 @@ class LVclosed:
                 while popt_temp>np.pi:
                     popt_temp-=2.*np.pi
                 popt_temp*=180./np.pi
-            self.defaultParameters['rvfuncarg'].append(popt_temp)
+                self.defaultParameters['rvuphase'+str(int(n/2)+1)]=popt_temp
+            else:
+                self.defaultParameters['rvuamp'+str(int(n/2)+1)]=popt_temp
         
     def scaleWinkessel(self,scaleDict,compstr=''):
         self.defaultParameters.scaleWinkessel(scaleDict,compstr=compstr)
