@@ -98,22 +98,6 @@ def createLVcircuit(casename,paramDict,stepTime=10,skipVariableList=None,verbose
             if cavity+"uphase"+str(n) not in skipVariableList:
                 cmd = "sed -i.bak s/'<<"+cavity+"uphase"+str(n)+">>'/'" + str(paramDict[cavity+"uphase"+str(n)])+ "m'/g " + cirfilename
                 os.system(cmd)
-    if "rvfuncarg" not in skipVariableList:
-        for n in range(4):
-            if n<int(len(paramDict['rvfuncarg'])/2):
-                suffixDict_ind=max(-5,min(4,int(np.floor(np.log10(abs(paramDict['rvfuncarg'][n*2]))/3.))))
-                rvfuncarg='{:10.6f}'.format(paramDict['rvfuncarg'][n*2]/(1000.**suffixDict_ind))+suffixDict[suffixDict_ind]
-                cmd = "sed -i.bak s/'<<rvuamp"+str(n+1)+">>'/'" + rvfuncarg + "'/g " + cirfilename
-                os.system(cmd)
-                
-                rvfuncarg='{:10.6f}'.format(paramDict['rvfuncarg'][n*2+1])
-                cmd = "sed -i.bak s/'<<rvuphase"+str(n+1)+">>'/'" + rvfuncarg + "'/g " + cirfilename
-                os.system(cmd)
-            else:
-                cmd = "sed -i.bak s/'<<rvuamp"+str(n+1)+">>'/'0'/g " + cirfilename
-                os.system(cmd)
-                cmd = "sed -i.bak s/'<<rvuphase"+str(n+1)+">>'/'0'/g " + cirfilename
-                os.system(cmd)
     
     if "stepTime" not in skipVariableList:
         cmd = "sed -i.bak s/'<<stepTime>>'/'" + str(stepTime)+'u'+ "'/g " + cirfilename
