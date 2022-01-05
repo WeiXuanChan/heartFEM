@@ -75,7 +75,10 @@ def generateLVtable(casename,period,timetopeak=None,verbose=True,stackaddstr=Non
     else:
         datatable=np.array(datatable[0])
     datatable=datatable[sortVolume]
-    
+    for volN in range(datatable.shape[0]):
+        maxInd=np.argmax(datatable[volN])
+        lastZeroInd=np.nonzero(datatable[volN][maxInd:]==0)[0][0]-1+maxInd
+        datatable[volN][maxInd:(lastZeroInd+1)]=datatable[volN][maxInd]*(datatable[volN][maxInd:(lastZeroInd+1)]-datatable[volN][lastZeroInd])/(datatable[volN][maxInd]-datatable[volN][lastZeroInd])
     datatable=datatable.T*scale_T0_LV
     np.savetxt(LVtablefile,datatable,fmt='%.9e')
 
