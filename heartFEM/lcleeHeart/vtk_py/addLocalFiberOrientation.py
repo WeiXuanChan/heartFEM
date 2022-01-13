@@ -5,13 +5,13 @@ import math
 import numpy
 import vtk
 from random import uniform as randuniform
-from heartFEM.lcleeHeart.vtk_py.addLocalFiberOrientation            import *
-from heartFEM.lcleeHeart.vtk_py.addLocalProlateSpheroidalDirections import *
-from heartFEM.lcleeHeart.vtk_py.createFloatArray                    import *
-from heartFEM.lcleeHeart.vtk_py.getABPointsFromBoundsAndCenter      import *
-from heartFEM.lcleeHeart.vtk_py.readSTL                             import *
-from heartFEM.lcleeHeart.vtk_py.readUGrid                           import *
-from heartFEM.lcleeHeart.vtk_py.writeUGrid                          import *
+from .addLocalFiberOrientation            import *
+from .addLocalProlateSpheroidalDirections import *
+from .createFloatArray                    import *
+from .getABPointsFromBoundsAndCenter      import *
+from .readSTL                             import *
+from .readUGrid                           import *
+from .writeUGrid                          import *
 
 ########################################################################
 def normalDistribution(x,mu,sigma):
@@ -61,10 +61,10 @@ def addLocalFiberOrientation(ugrid_wall,
                              fiber_angle_end_input,
                              fiber_angle_epi_input,
                              points_AB=None,
-                             fiberSheetletAngle=0., #can be a function(coord=), include **kwargs in input
-                             fiberSheetletWidth=0., #can be a class with __call__(coord=,sheetlet_angle=), include **kwargs in input and self.max=max_width
-                             radialFiberAngle=0., #can be a function(coord=), include **kwargs in input
-                             fiberLength=0., #can be a class with __call__(coord=,fiber_radial_angle=), include **kwargs in input and self.max=max_length
+                             fiberSheetletAngle=0., #can be a function(coord=,endo_dist_ratio=), include **kwargs in input
+                             fiberSheetletWidth=0., #can be a class with __call__(coord=,endo_dist_ratio=,sheetlet_angle=), include **kwargs in input and self.max=max_width
+                             radialFiberAngle=0., #can be a function(coord=,endo_dist_ratio=), include **kwargs in input
+                             fiberLength=0., #can be a class with __call__(coord=,endo_dist_ratio=,fiber_radial_angle=), include **kwargs in input and self.max=max_length
                              verbose=True):
 
     if (verbose): print ('*** addLocalFiberOrientation ***')
@@ -165,7 +165,7 @@ def addLocalFiberOrientation(ugrid_wall,
                             if isinstance(fiberLength,(int,float)):
                                 temp_fiberLength=fiberLength
                             else:
-                                temp_fiberLength=fiberLength(coord=cell_centers_Index[n],fiber_radial_angle=temp_fiber_radial_angle)
+                                temp_fiberLength=fiberLength(coord=cell_centers_Index[n],endo_dist_ratio=norm_dist_end,fiber_radial_angle=temp_fiber_radial_angle)
                             if cir_dist[n]>0.:
                                 norm_cir_dist[n]=cir_dist[n]/numpy.abs(0.5*temp_fiberLength*math.cos(math.pi*temp_fiber_radial_angle/180)+temp_radialPos)
                             elif cir_dist[n]<0.:
@@ -179,7 +179,7 @@ def addLocalFiberOrientation(ugrid_wall,
                             if isinstance(fiberSheetletWidth,(int,float)):
                                 temp_fiberSheetletWidth=fiberSheetletWidth
                             else:
-                                temp_fiberSheetletWidth=fiberSheetletWidth(coord=cell_centers_Index[n],sheetlet_angle=temp_sheetlet_angle)
+                                temp_fiberSheetletWidth=fiberSheetletWidth(coord=cell_centers_Index[n],endo_dist_ratio=norm_dist_end,sheetlet_angle=temp_sheetlet_angle)
                             if longi_dist[n]>0.:
                                 norm_longi_dist[n]=longi_dist[n]/numpy.abs(0.5*temp_fiberSheetletWidth*math.cos(math.pi*temp_sheetlet_angle/180)+temp_sheeletPos)
                             elif longi_dist[n]<0.:
@@ -203,21 +203,21 @@ def addLocalFiberOrientation(ugrid_wall,
                     if isinstance(radialFiberAngle,(int,float)):
                         fiber_radial_angle=radialFiberAngle
                     else:
-                        fiber_radial_angle=radialFiberAngle(coord=cell_centers[num_cell])
+                        fiber_radial_angle=radialFiberAngle(coord=cell_centers[num_cell],endo_dist_ratio=norm_dist_end)
                     if isinstance(fiberLength,(int,float)):
                         temp_fiberLength=fiberLength
                     else:
-                        temp_fiberLength=fiberLength(coord=cell_centers[num_cell],fiber_radial_angle=temp_fiber_radial_angle)
+                        temp_fiberLength=fiberLength(coord=cell_centers[num_cell],endo_dist_ratio=norm_dist_end,fiber_radial_angle=temp_fiber_radial_angle)
                     temp_radialFiberCirHalfLength=0.5*temp_fiberLength*math.cos(math.pi*fiber_radial_angle/180)
                     radialPos=randuniform(-temp_radialFiberCirHalfLength,temp_radialFiberCirHalfLength)
                     if isinstance(fiberSheetletAngle,(int,float)):
                         sheetlet_angle=fiberSheetletAngle
                     else:
-                        sheetlet_angle=fiberSheetletAngle(coord=cell_centers[num_cell])
+                        sheetlet_angle=fiberSheetletAngle(coord=cell_centers[num_cell],endo_dist_ratio=norm_dist_end)
                     if isinstance(fiberSheetletWidth,(int,float)):
                         temp_fiberSheetletWidth=fiberSheetletWidth
                     else:
-                        temp_fiberSheetletWidth=fiberSheetletWidth(coord=cell_centers[num_cell],sheetlet_angle=temp_sheetlet_angle)
+                        temp_fiberSheetletWidth=fiberSheetletWidth(coord=cell_centers[num_cell],endo_dist_ratio=norm_dist_end,sheetlet_angle=temp_sheetlet_angle)
                     temp_sheetLongiHalfLength=0.5*temp_fiberSheetletWidth*math.cos(math.pi*sheetlet_angle/180)
                     sheeletPos=randuniform(-temp_sheetLongiHalfLength,temp_sheetLongiHalfLength)
                 sheeletShifttowardsEndo=sheeletPos*math.tan(math.pi*sheetlet_angle/180)-radialPos*math.tan(math.pi*fiber_radial_angle/180)
@@ -225,21 +225,21 @@ def addLocalFiberOrientation(ugrid_wall,
                 if isinstance(radialFiberAngle,(int,float)):
                     fiber_radial_angle=radialFiberAngle
                 else:
-                    fiber_radial_angle=radialFiberAngle(coord=cell_centers[num_cell])
+                    fiber_radial_angle=radialFiberAngle(coord=cell_centers[num_cell],endo_dist_ratio=norm_dist_end)
                 if isinstance(fiberLength,(int,float)):
                     temp_fiberLength=fiberLength
                 else:
-                    temp_fiberLength=fiberLength(coord=cell_centers[num_cell],fiber_radial_angle=temp_fiber_radial_angle)
+                    temp_fiberLength=fiberLength(coord=cell_centers[num_cell],endo_dist_ratio=norm_dist_end,fiber_radial_angle=temp_fiber_radial_angle)
                 temp_radialFiberCirHalfLength=0.5*temp_fiberLength*math.cos(math.pi*fiber_radial_angle/180)
                 radialPos=randuniform(-temp_radialFiberCirHalfLength,temp_radialFiberCirHalfLength)
                 if isinstance(fiberSheetletAngle,(int,float)):
                     sheetlet_angle=fiberSheetletAngle
                 else:
-                    sheetlet_angle=fiberSheetletAngle(coord=cell_centers[num_cell])
+                    sheetlet_angle=fiberSheetletAngle(coord=cell_centers[num_cell],endo_dist_ratio=norm_dist_end)
                 if isinstance(fiberSheetletWidth,(int,float)):
                     temp_fiberSheetletWidth=fiberSheetletWidth
                 else:
-                    temp_fiberSheetletWidth=fiberSheetletWidth(coord=cell_centers[num_cell],sheetlet_angle=temp_sheetlet_angle)
+                    temp_fiberSheetletWidth=fiberSheetletWidth(coord=cell_centers[num_cell],endo_dist_ratio=norm_dist_end,sheetlet_angle=temp_sheetlet_angle)
                 temp_sheetLongiHalfLength=0.5*temp_fiberSheetletWidth*math.cos(math.pi*sheetlet_angle/180)
                 sheeletPos=randuniform(-temp_sheetLongiHalfLength,temp_sheetLongiHalfLength)
                 sheeletShifttowardsEndo=sheeletPos*math.tan(math.pi*sheetlet_angle/180)-radialPos*math.tan(math.pi*fiber_radial_angle/180)
