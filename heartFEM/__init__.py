@@ -142,9 +142,9 @@ History:
   Author: w.x.chan@gmail.com         05Nov2021           - v4.0.0
                                                             -heartModelTranslator v4.0.0 
                                                                 -new
-                                                            -ngspice_py v3.5.0
-                                                            -heartParameters v3.6.0
-                                                            -lcleeHeart v3.6.1
+                                                            -ngspice_py v4.0.0
+                                                            -heartParameters v4.0.0
+                                                            -lcleeHeart v4.0.0
 '''
 _version='4.0.0'
 import logging
