@@ -17,9 +17,12 @@ History:
                                                               - added switchvalve
   Author: w.x.chan@gmail.com         29Sep2021           - v3.6.0
                                                               -added aortic and pulmonary valve regurgitation
+  Author: w.x.chan@gmail.com         09Nov2021           - v4.0.0
+                                                              -remove aortic stenosis parameter
+                                                              -change time unit to ms
 '''
 ########################################################################
-_version='3.5.1'
+_version='4.0.0'
 import logging
 logger = logging.getLogger(__name__)
 
@@ -30,86 +33,121 @@ import inspect
 from heartFEM import ngspice_py
 import numpy as np
 ########################################################################
-Components=['lv','la','rv','ra','aa','ao1','ao2','ao3','ao4','br','ca','ub','he','inte','ivc','kid','leg','lung','pa1','pa2','plac','svc','uv']
-linkComponents=['aaao1','ao1ao2','ao2ao3','ao3ao4','pa1pa2','pa2lung','da','ao1ca','cabr','brsvc','ao1ub','ubsvc','ao3he','ao3inte','intehe','ao3kid','kidivc','ao4plac','placuv','ao4leg','legivc','uvhe','heivc','dv','svcra','ivcra','lungla','fo','raravalv','rvrvvalv','lvlvvalv','lalavalv']
-keyToFill=[]
-for comp in Components:
-    keyToFill.append(comp+'c')
-
-for comp in linkComponents:
-    keyToFill.append(comp+'r')
-    keyToFill.append(comp+'l')
-    keyToFill.append(comp+'k')
-    keyToFill.append(comp+'b')
-    
-suffixDict={4:'T  ',3:'g  ',2:'meg',1:'k  ',0:' ',-1:'m  ',-2:'u  ',-3:'n  ',-4:'p  ',-5:'f  '}
 
 def createLVcircuit(casename,paramDict,stepTime=10,skipVariableList=None,verbose=True):
 
     logger.info('*** createLVcircuit ***')
+    if 'reference ngspice circuit filename' not in paramDict:
+        refcirfilename="LV.cir"
+    else:
+        refcirfilename=paramDict["reference ngspice circuit filename"]
     if skipVariableList is None:
         skipVariableList=[]
     cur_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))) 
     savePath=os.path.dirname(os.path.abspath(casename))
-    LVcirfile = cur_dir + "/LV.cir"
+    LVcirfile = cur_dir + "/"+refcirfilename+".cir"
     cirfilename = casename + ".cir"
     
     logger.info('cur_dir ' +repr(cur_dir))
     cmd = "cp " + LVcirfile + " " + cirfilename
     os.system(cmd)
-    for key in keyToFill:
+    for key in ngspice_py.keyToFill:
         if key not in skipVariableList:
             addstr='{:10.6f}   '.format(0)
             if key in paramDict:
                 if isinstance(paramDict[key],(float,int)):
                     if paramDict[key]!=0:
-                        if key in ['lvlvvalvk','lvlvvalvr']:
-                            multiple_value=paramDict['Aortic_stenosis']
-                        else:
-                            multiple_value=1.
-                        suffixDict_ind=max(-5,min(4,int(np.floor(np.log10(abs(paramDict[key]*multiple_value))/3.))))
-                        addstr='{:10.6f}'.format(paramDict[key]*multiple_value/(1000.**suffixDict_ind))+suffixDict[suffixDict_ind]
+                        suffixDict_ind=max(-5,min(4,int(np.floor(np.log10(abs(paramDict[key]))/3.))))
+                        addstr='{:10.6f}'.format(paramDict[key]/(1000.**suffixDict_ind))+ngspice_py.suffixDict[suffixDict_ind]
                 else:
                     addstr=str(paramDict[key])
             cmd = "sed -i.bak s/'<<"+key+">>'/'" + addstr + "'/g " + cirfilename
             os.system(cmd)
     if "cycle" not in skipVariableList:
-        cmd = "sed -i.bak s/'<<cycle>>'/'" + str(paramDict['BCL']) + "m'/g " + cirfilename
+        cmd = "sed -i.bak s/'<<cycle>>'/'" + str(paramDict['duration of one cardiac cycle in ms']) + "'/g " + cirfilename
         os.system(cmd)
+    for side in ['la','ra','lv','rv']:
+        if paramDict['Windkessel '+side.upper()+' source function']=='pulse':
+            cmd = "sed -i.bak s/'<<"+side+"sourcemode>>'/'0'/g " + cirfilename
+            os.system(cmd)
+        elif paramDict['Windkessel '+side.upper()+' source function']=='fourier current':
+            
+            cmd = "sed -i.bak s/'<<"+side+"sourcemode>>'/'1'/g " + cirfilename
+            os.system(cmd)
+        if 'current' in paramDict['Windkessel '+side.upper()+' source function']:
+            cmd = "sed -i.bak s/'<<"+side+"inputvar>>'/'I'/g " + cirfilename
+            os.system(cmd)
+        else:
+            cmd = "sed -i.bak s/'<<"+side+"inputvar>>'/'V'/g " + cirfilename
+            os.system(cmd)
+        for tempstr,temp_paramStr in zip(['amp','peaktime','width'],['Windkessel {0:s} source pulse function peak pressure in mmHg','Windkessel {0:s} source pulse function time at peak pressure in ms','Windkessel {0:s} source pulse function pressure pulse width in ms']):
+            if side+tempstr not in skipVariableList:
+                cmd = "sed -i.bak s/'<<"+side+tempstr+">>'/'" + '{:10.6f}'.format(paramDict[temp_paramStr.format(side.upper())]) + "'/g " + cirfilename
+                os.system(cmd)
+        for n in range(4):
+            if paramDict['Windkessel '+side.upper()+' source fourier function sine amplitude term '+str(n)]!=0:
+                suffixDict_ind=max(-5,min(4,int(np.floor(np.log10(abs(paramDict['Windkessel '+side.upper()+' source fourier function sine amplitude term '+str(n)]))/3.))))
+            else:
+                suffixDict_ind=0
+            rvfuncarg='{:10.6f}'.format(paramDict['Windkessel '+side.upper()+' source fourier function sine amplitude term '+str(n)]/(10.**(3*suffixDict_ind)))+ngspice_py.suffixDict[suffixDict_ind]
+            
+            cmd = "sed -i.bak s/'<<"+side+"uamp"+str(n+1)+">>'/'" + rvfuncarg + "'/g " + cirfilename
+            os.system(cmd)
+        
+            rvfuncarg='{:10.6f}'.format(paramDict['Windkessel '+side.upper()+' source fourier function sine degree phase term '+str(n)])
+            cmd = "sed -i.bak s/'<<"+side+"uphase"+str(n+1)+">>'/'" + rvfuncarg + "'/g " + cirfilename
+            os.system(cmd)
+        if 'time based' in paramDict['Windkessel '+side.upper()+' source function']:
+            cmd = "sed -i.bak s/'<<"+side+"sourcemode>>'/'2'/g " + cirfilename
+            os.system(cmd)
+            cmd = "sed -i.bak s/'<<"+side+"ufile>>'/'temp_" +paramDict['Windkessel '+side.upper()+' source file']+ "'/g " + cirfilename
+            os.system(cmd)
+        elif '2D table' in paramDict['Windkessel '+side.upper()+' source function']:
+            cmd = "sed -i.bak s/'<<"+side+"utablefile>>'/'temp_" +paramDict['Windkessel '+side.upper()+' source file'] + "'/g " + cirfilename
+            os.system(cmd)
+            cmd = "sed -i.bak s/'<<"+side+"utablebasefile>>'/'temp_" +paramDict['Windkessel '+side.upper()+' source file'][:-4]+'base.txt' + "'/g " + cirfilename
+            os.system(cmd)
+            if 'tracking of relaxation phase' in paramDict['Windkessel '+side.upper()+' source function']:
+                cmd = "sed -i.bak s/'<<"+side+"sourcemode>>'/'4'/g " + cirfilename
+                os.system(cmd)
+                cmd = "sed -i.bak s/'<<"+side+"trtablefile>>'/'temp_"+paramDict['Windkessel '+side.upper()+' source file'][:-4]+"tr.txt'/g " + cirfilename
+                os.system(cmd)
+            else:
+                cmd = "sed -i.bak s/'<<"+side+"sourcemode>>'/'3'/g " + cirfilename
+                os.system(cmd)
+        elif '3D table' in paramDict['Windkessel '+side.upper()+' source function']:
+            cmd = "sed -i.bak s/'<<"+side+"utablefile>>'/'temp_" +paramDict['Windkessel '+side.upper()+' source file'] + "'/g " + cirfilename
+            os.system(cmd)
+            cmd = "sed -i.bak s/'<<"+side+"utablebasefile>>'/'temp_" +paramDict['Windkessel '+side.upper()+' source file'][:-4]+'base.txt' + "'/g " + cirfilename
+            os.system(cmd)
+            if 'tracking of relaxation phase' in paramDict['Windkessel '+side.upper()+' source function']:
+                cmd = "sed -i.bak s/'<<"+side+"sourcemode>>'/'6'/g " + cirfilename
+                os.system(cmd)
+                cmd = "sed -i.bak s/'<<"+side+"trtablefile>>'/'temp_"+paramDict['Windkessel '+side.upper()+' source file'][:-4]+"tr.txt'/g " + cirfilename
+                os.system(cmd)
+            else:
+                cmd = "sed -i.bak s/'<<"+side+"sourcemode>>'/'5'/g " + cirfilename
+                os.system(cmd)
     for valve in ['lv','rv','aa','pa1']:
-        if valve+"regurgevalveratio" not in skipVariableList:
+        if (valve+"regurgevalveratio" not in skipVariableList) and (valve+"regurgevalveratio" in paramDict):
             cmd = "sed -i.bak s/'<<"+valve+"regurgevalveratio>>'/'" + str(paramDict[valve+"regurgevalveratio"]) + "'/g " + cirfilename
             os.system(cmd)
-    for cavity in ['la','ra','lv','rv']:
-        if cavity+'sourcemode' not in skipVariableList and cavity!='lv':
-            cmd = "sed -i.bak s/'<<"+cavity+"sourcemode>>'/'" + str(paramDict[cavity+"sourcemode"]) + "'/g " + cirfilename
+    for side in ['la','ra','lv','rv']:
+        if (side+"timetopeaktension" not in skipVariableList) and (side+"timetopeaktension" in paramDict):
+            cmd = "sed -i.bak s/'<<"+side+"timetopeaktension>>'/'" + str(paramDict['time to maximum '+side.upper()+' fiber tension in ms'])+ "m'/g " + cirfilename
             os.system(cmd)
-        if cavity+"timetopeaktension" not in skipVariableList:
-            cmd = "sed -i.bak s/'<<"+cavity+"timetopeaktension>>'/'" + str(paramDict['t0'])+ "m'/g " + cirfilename
-            os.system(cmd)
-        for tempstr in ['amp','peaktime','width']:
-            if cavity+tempstr not in skipVariableList:
-                cmd = "sed -i.bak s/'<<"+cavity+tempstr+">>'/'" + '{:10.6f}'.format(paramDict[cavity+tempstr]) + "'/g " + cirfilename
-                os.system(cmd)
-        for n in range(1,5):
-            if cavity+"uamp"+str(n) not in skipVariableList:
-                cmd = "sed -i.bak s/'<<"+cavity+"uamp"+str(n)+">>'/'" + str(paramDict[cavity+"uamp"+str(n)])+ "'/g " + cirfilename
-                os.system(cmd)
-            if cavity+"uphase"+str(n) not in skipVariableList:
-                cmd = "sed -i.bak s/'<<"+cavity+"uphase"+str(n)+">>'/'" + str(paramDict[cavity+"uphase"+str(n)])+ "'/g " + cirfilename
-                os.system(cmd)
     
     if "stepTime" not in skipVariableList:
-        cmd = "sed -i.bak s/'<<stepTime>>'/'" + str(stepTime)+'u'+ "'/g " + cirfilename
+        cmd = "sed -i.bak s/'<<stepTime>>'/'" + str(stepTime)+'m'+ "'/g " + cirfilename
         os.system(cmd)
     if skipVariableList is None:
         rvdatabase=np.loadtxt(casename+'_rvflowrate.txt')
         rvdata=rvdatabase.copy()
         for n in range(1,11):
-            rvdata=np.concatenate((rvdata,rvdatabase+np.array([[paramDict['BCL']*n/1000.,0.]])),axis=0)
+            rvdata=np.concatenate((rvdata,rvdatabase+np.array([[paramDict['duration of one cardiac cycle in ms']*n,0.]])),axis=0)
         lvufilecontrol=casename+'_lvflowratecontrol.txt'
         np.savetxt(lvufilecontrol,rvdata)
-        ngspice_py.simLVcircuit(casename,paramDict['BCL']*10.,lvufilecontrol,lvinputvar='i')
+        ngspice_py.simLVcircuit(casename,paramDict['duration of one cardiac cycle in ms']*10.,lvufilecontrol,lvinputvar='i')
         lvdata=np.loadtxt(casename+'_circuit.txt',skiprows=1)[:,:2]
         np.savetxt(casename+'_lvucontrol.txt',lvdata)
 

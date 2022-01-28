@@ -14,9 +14,11 @@ History:
                                                               -add 2nd guess for adjust EDVol
   Author: w.x.chan@gmail.com         28Sep2021           - v3.6.0
                                                               -debug remove exit when not converged
+  Author: w.x.chan@gmail.com         09Nov2021           - v4.0.0
+                                                              -change time unit to ms
 '''
 ########################################################################
-_version='3.6.0'
+_version='4.0.0'
 import logging
 logger = logging.getLogger(__name__)
 
@@ -29,9 +31,7 @@ import numpy as np
 from scipy import interpolate
 ########################################################################
 
-suffixDict={4:'T  ',3:'g  ',2:'meg',1:'k  ',0:' ',-1:'m  ',-2:'u  ',-3:'n  ',-4:'p  ',-5:'f  '}
-
-def simLVcircuit_alignEStime(casename,stopTime,lvufile,period,targetEStime,init_timetopeaktension,try_timetopeaktension=None,lvinputvar='V',initLAvol=0,initRAvol=0,initLVvol=0,initRVvol=0,vla0=None,vra0=None,init_file=None,init_time=None,iterationNumber=100,verbose=True):
+def simLVcircuit_alignEStime(casename,stopTime,sourcefileDict,period,targetEStime,init_timetopeaktension,try_timetopeaktension=None,initLAvol=0,initRAvol=0,initLVvol=0,initRVvol=0,vla0=None,vra0=None,init_file=None,init_time=None,iterationNumber=100,verbose=True):
 
     if try_timetopeaktension is None:
         try_timetopeaktension=init_timetopeaktension
@@ -45,12 +45,11 @@ def simLVcircuit_alignEStime(casename,stopTime,lvufile,period,targetEStime,init_
     last_EStime=0
     for n in range(iterationNumber):
         logger.info("    Trying timetopeak="+repr(try_timetopeaktension))
-        case_dir,lvufilename = os.path.split(lvufile)
+        case_dir,lvufilename = os.path.split(sourcefileDict['Windkessel LV source file'])
         timetopeak_from_to=[init_timetopeaktension,try_timetopeaktension]
-        ngspice_py.simLVcircuit(casename,stopTime,lvufile,lvinputvar=lvinputvar,initLAvol=initLAvol,initRAvol=initRAvol,initLVvol=initLVvol,initRVvol=initRVvol,vla0=vla0,vra0=vra0,init_file=init_file,init_time=init_time,timetopeak_from_to=timetopeak_from_to,verbose=verbose)
+        ngspice_py.simLVcircuit(casename,stopTime,sourcefileDict,initLAvol=initLAvol,initRAvol=initRAvol,initLVvol=initLVvol,initRVvol=initRVvol,vla0=vla0,vra0=vra0,init_file=init_file,init_time=init_time,timetopeak_from_to=timetopeak_from_to,verbose=verbose)
         
         cir_results=np.loadtxt(case_dir+'/'+'circuit_results.txt',skiprows=1)[:,2:4]
-        cir_results[:,0]*=1000. #set to ms
         while cir_results[-1,0]>=(2.*period):
             cir_results[:,0]-=period
         cir_results=cir_results[cir_results[:,0]>=0]
@@ -80,7 +79,7 @@ def simLVcircuit_alignEStime(casename,stopTime,lvufile,period,targetEStime,init_
     
     return (try_timetopeaktension,adj_timetopeaktension)
 
-def simLVcircuit_align_EDvol_and_EStime(casename,stopTime,lvufile,period,targetEStime,init_timetopeaktension,try_initLVvol=None,lvinputvar='V',initLAvol=0,initRAvol=0,initLVvol=0,initRVvol=0,vla0=None,vra0=None,init_file=None,init_time=None,iterationNumber=100,verbose=True):
+def simLVcircuit_align_EDvol_and_EStime(casename,stopTime,sourcefileDict,period,targetEStime,init_timetopeaktension,try_initLVvol=None,initLAvol=0,initRAvol=0,initLVvol=0,initRVvol=0,vla0=None,vra0=None,init_file=None,init_time=None,iterationNumber=100,verbose=True):
     targetinitLVvol=initLVvol
     if try_initLVvol is None:
         try_initLVvol=initLVvol*1.05
@@ -96,17 +95,16 @@ def simLVcircuit_align_EDvol_and_EStime(casename,stopTime,lvufile,period,targetE
     for n in range(iterationNumber):
         logger.info("Trying initLVvol="+repr(try_initLVvol))
         if targetEStime is None:
-            ngspice_py.simLVcircuit(casename,stopTime,lvufile,lvinputvar=lvinputvar,initLAvol=initLAvol,initRAvol=initRAvol,initLVvol=try_initLVvol,initRVvol=initRVvol,vla0=vla0,vra0=vra0,init_file=init_file,init_time=init_time,verbose=verbose)
+            ngspice_py.simLVcircuit(casename,stopTime,sourcefileDict,initLAvol=initLAvol,initRAvol=initRAvol,initLVvol=try_initLVvol,initRVvol=initRVvol,vla0=vla0,vra0=vra0,init_file=init_file,init_time=init_time,verbose=verbose)
         else:
             if n==0:
                 try_timetopeaktension=None
             else:
                 try_timetopeaktension=list(try_timetopeaktension)
                 try_timetopeaktension[1]=try_timetopeaktension[1]*3.
-            try_timetopeaktension=simLVcircuit_alignEStime(casename,stopTime,lvufile,period,targetEStime,init_timetopeaktension,try_timetopeaktension=try_timetopeaktension,lvinputvar=lvinputvar,initLAvol=initLAvol,initRAvol=initRAvol,initLVvol=try_initLVvol,initRVvol=initRVvol,vla0=vla0,vra0=vra0,init_file=init_file,init_time=init_time,iterationNumber=iterationNumber,verbose=verbose)
+            try_timetopeaktension=simLVcircuit_alignEStime(casename,stopTime,sourcefileDict,period,targetEStime,init_timetopeaktension,try_timetopeaktension=try_timetopeaktension,initLAvol=initLAvol,initRAvol=initRAvol,initLVvol=try_initLVvol,initRVvol=initRVvol,vla0=vla0,vra0=vra0,init_file=init_file,init_time=init_time,iterationNumber=iterationNumber,verbose=verbose)
         case_dir,outfilename = os.path.split(casename)
         cir_results=np.loadtxt(case_dir+'/'+'circuit_results.txt',skiprows=1)[:,2:4]
-        cir_results[:,0]*=1000. #set to ms
         removePeriodCount=0
         while cir_results[-1,0]>=(2.*period):
             cir_results[:,0]-=period
