@@ -1,25 +1,26 @@
 from setuptools import setup
 setup(
   name = 'heartFEM',         # How you named your package folder (MyLib)
-  packages = ['heartFEM','heartFEM.lcleeHeart'],  
+  packages = ['heartFEM','heartFEM.lcleeHeart','heartFEM.ngspice_py'],  
   include_package_data=True,   
   package_data={
         'ngspice':['*'],
-        'lcleeHeart':['*','vtk_py/*']
+        'lcleeHeart':['*']
         },
-  version = '3.6.4',      # Start with a small number and increase it with every change you make
+  version = '4.0.0,      # Start with a small number and increase it with every change you make
   license='MIT',        # Chose a license from here: https://help.github.com/articles/licensing-a-repository
   description = 'Optimization of patient specific heart model with myocardium FEM and cardiovascular network Windkessel.',   # Give a short description about your library
   author = 'Wei Xuan Chan',                   # Type in your name
   author_email = 'w.x.chan1986@gmail.com',      # Type in your E-Mail
   url = 'https://github.com/WeiXuanChan/heartFEM',   # Provide either the link to your github or to your website
-  download_url = 'https://github.com/WeiXuanChan/heartFEM/archive/v3.6.4.tar.gz',    
+  download_url = 'https://github.com/WeiXuanChan/heartFEM/archive/v4.0.0.tar.gz',    
   keywords = ['medical', 'cardiac'],   # Keywords that define your package best
   install_requires=['numpy','matplotlib','scipy'],
   extras_require = {
         'fem analysis software':  ['fenics'],
         'circuit analysis':  ['ngspice'],
-        'data storage and processing':  ['vtk']
+        'data storage and processing':  ['vtk'],
+        'data storage and processing':  ['vtk_py3'],
   },
   classifiers=[
     'Development Status :: 5 - Production/Stable',      # Chose either "3 - Alpha", "4 - Beta" or "5 - Production/Stable" as the current state of your package    
