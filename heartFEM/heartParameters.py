@@ -47,22 +47,55 @@ History:
   Author: w.x.chan@gmail.com         29Sep2021           - v3.6.0
                                                             -added regurgitation at aortic and pulmonary valve
                                                             -added "StrainEnergyDensityFunction_Coef"
+  Author: w.x.chan@gmail.com         05Nov2021           - v4.0.0
+                                                            -rename all parameters
+                                                            - change time units to milliseconds for Windkessel
+                                                            - adjustment to default power scaling
 '''
 _version='3.6.0'
 import logging
 import numpy as np
+import os
+try:
+    import dolfin as fenics
+except:
+    import fenics as fenics
 logger = logging.getLogger(__name__)
 
-parameters_for_FEniCS=['Kspring_constant','Tact_constant','T0_LV','ESV_LV','lr','BCL','Ca0','Ca0max','B','t0','l0','m','b']                 
-parameters_for_mesh=['topid','endoid','epiid','Laxis_X','Laxis_Y','Laxis_Z','clip_ratio','endo_angle','epi_angle','fiberSheetletAngle','fiberSheetletWidth','radialFiberAngle','EDV_LV','EDP_LV']
+parameters_for_FEniCS=['spring constant for LV pericardial cavity in Pa',
+                       'maximum LV fiber tension in Pa',
+                       'LV end systolic volume in mL',
+                       'LV sarcomere length',
+                       'duration of one cardiac cycle in ms',
+                       'peak intracellular calcium concentration in uM',
+                       'maximum peak intracellular calcium concentration in uM',
+                       'exponential coefficient for relation of peak isometric tension and sarcomere length in um-1',
+                       'peak intracellular calcium concentration in uM',
+                       'LV sarcomere stretch ratio threshold where no tension develops',
+                       'slope of linear relation of relaxation duration and sarcomere length in ms um-1',
+                       'time intercept of linear relation of relaxation duration and sarcomere length in ms']                 
+parameters_for_mesh=['LV base mesh surface ID',
+                     'LV endocardial mesh surface ID',
+                     'LV epicardial mesh surface ID',
+                     'LV longitudinal axis superior X',
+                     'LV longitudinal axis superior Y',
+                     'LV longitudinal axis superior Z',
+                     'ratio to clip mesh',
+                     'LV endocardial fiber angle in degree',
+                     'LV epicardial fiber angle in degree',
+                     'LV fiber sheetlet angle in degrees',
+                     'LV fiber sheetlet width',
+                     'LV fiber radial angle in degrees',
+                     'LV end diastolic volume in mL',
+                     'LV end diastolic pressure in mmHg']
 WindkesselComponents=['lv','la','rv','ra','aa','ao1','ao2','ao3','ao4','br','ca','ub','he','inte','ivc','kid','leg','lung','pa1','pa2','plac','svc','uv']
 WindkessellinkComponents=['aaao1','ao1ao2','ao2ao3','ao3ao4','pa1pa2','pa2lung','da','ao1ca','cabr','brsvc','ao1ub','ubsvc','ao3he','ao3inte','intehe','ao3kid','kidivc','ao4plac','placuv','ao4leg','legivc','uvhe','heivc','dv','svcra','ivcra','lungla','fo','raravalv','lalavalv','lvlvvalv','rvrvvalv']
 defaultAgeScalePower={'defaultr':-1.,'pa2lungr':-1.2,'lunglar':-1.2,'cabrr':-1.1,'brsvcr':-1.1,'dvr':-0.55,
                       'defaultl':-0.33,
-                      'defaultc':1.33,'brc':1.471,'lungc':1.6,'rac':0.5,'lac':0.5,
+                      'defaultc':1.,'brc':1.471,'lungc':1.6,'rac':0.5,'lac':0.5,
                       'defaultk':0.,'fok':-0.6,'dak': -2.5,'dvk':-0.88,'raravalvk':-1.33,'rvrvvalvk':-1.33,'lalavalvk':-1.33,'lvlvvalvk':-1.33,
                       'defaultb':0.}
-defaultAdjustmentToScaling={'r_scale':1.21,'c_scale':0.27,'C_adj':1./1.33,'R_adj':-0.58/-1.}
+defaultAdjustmentToScaling={'r_scale':1.21,'c_scale':0.27}
 
 
 
@@ -71,30 +104,6 @@ class heartParameters(dict):
         return super().__new__(cls)
     def __init__(self,defaultParameters=None,defaultAge=None):
         '''
-        MESH parameters:
-            'topid'           #id for the base it is on top of geometry
-            'endoid'          #id for the inner surface it is on top of geometry
-            'epiid'           #id for the outer surface it is on top of geometry
-            'Laxis_X'         # longitudinal axis X
-            'Laxis_Y'         # longitudinal axis Y
-            'Laxis_Z'         # longitudinal axis Z
-            'clip_ratio'      #ratio to clip the stl 1 is not to clip 0 is to clip all
-       FENICS parameters:
-            'Kspring_constant'     #Kspring constant which model as pericardial cavity , unit in Pa
-            'Tact_constant'        #Tact_constant we dont use it, unit is in Pa 
-            'T0_LV'                #active tension forces unit in Pa
-            'EDV_LV'               #End-diastolic volume for left ventricle
-            'EDP_LV'               #End-diastolic pressure for left ventricle
-            'ESV_LV'               #End-systolic volume for left ventricle
-            'lr'                   # relaxed sarcomere length
-            'BCL'                  # base cycle length (time) in milliseconds 
-            'Ca0'                  # peak intracellular calcium concentration
-            'Ca0max'               #maximum intracellular calcium concentration for calculating the length-dependent calcium sensitivity variable
-            'B'                    # exponential constant for length-dependent calcium sensitivity variable
-            't0'                   # time to peak tention
-            'l0'                   # length of sarcomere for which below this value, has no tension developed
-            'm'                    # slope for linear variation of relaxation time with sarcomere length
-            'b'                    # y-intercept for linear variation of relaxation time with sarcomere length
         NGSPICE parameters:
             'ES_time'          # target End-systolic time to match while adjusting time to peak tension
             ADULT
@@ -137,74 +146,105 @@ class heartParameters(dict):
             defaultAge=tempAge
         elif defaultAge[:5]!='adult' and defaultAge[:5]!='fetal':
             defaultAge=tempAge
-        self['topid'] = 4 #id for the base it is on top of geometry
-        self['endoid'] = 2 #id for the inner surface it is on top of geometry
-        self['epiid'] = 1 #id for the outer surface it is on top of geometry
+        self['heart to solve for inverse']=False
+        self['path of folder with case']='.'
+        self['filename of stl']='t0'
+        self['name of mesh']='t0'
+        self['subfolder to save files']=''
+        self['subfolder to load files']=''
+        self['common communicator']=fenics.Mesh().mpi_comm()
+             
+        self['LV base mesh surface ID'] = 4
+        self['LV endocardial mesh surface ID'] = 2
+        self['LV epicardial mesh surface ID'] = 1
+        self['RV endocardial mesh surface ID'] = 3
         
-        self['Laxis_X']=None # longitudinal axis X
-        self['Laxis_Y']=None # longitudinal axis Y
-        self['Laxis_Z']=None # longitudinal axis Z
-        self['clip_ratio']=0.95
+        self['LV longitudinal axis superior X']=None # longitudinal axis X towards base
+        self['LV longitudinal axis superior Y']=None # longitudinal axis Y
+        self['LV longitudinal axis superior Z']=None # longitudinal axis Z
+        self['LV lateral axis X']=None # longitudinal axis X rv towards lv
+        self['LV lateral axis Y']=None # longitudinal axis Y
+        self['LV lateral axis Z']=None # longitudinal axis Z
+        self['ratio to clip mesh']=0.95
+        self['mesh element size factor']=0.6
         
-        self['Kspring_constant']=90 #Kspring constant which model as pericardial cavity , unit in Pa
-        self['Tact_constant'] = 1e5 #Tact_constant we dont use it, unit is in Pa 
+        self['spring constant for LV pericardial cavity in Pa']=90
         
-        self['EDV_LV'] = 3.004778703264237
-        self['EDP_LV'] = None
-        self['ESV_LV'] = 1.4
-        self['ES_time'] = None
+        self['LV end diastolic volume in mL'] = 3.004778703264237
+        self['LV end diastolic pressure in mmHg'] = None
+        self['LV end systolic volume in mL'] = 1.4
+        self['duration of LV diastole in ms'] = None
         
+        self['RV end diastolic volume in mL'] = 3.004778703264237
+        self['RV end diastolic pressure in mmHg'] = None
+        self['RV end systolic volume in mL'] = 1.4
         
-        self['lr'] = 1.85
+        self['fiber relaxation based on phase during FEA']=False
+        self['LV sarcomere length'] = 1.85
         
-        self["StrainEnergyDensityFunction_Coef"]=100.
-        self["StrainEnergyDensityFunction_Cff"]=29.9
-        self["StrainEnergyDensityFunction_Css"]=13.3
-        self["StrainEnergyDensityFunction_Cnn"]=13.3
-        self["StrainEnergyDensityFunction_Cns"]=26.6
-        self["StrainEnergyDensityFunction_Cfs"]=53.2
-        self["StrainEnergyDensityFunction_Cfn"]=53.2
+        self["strain energy density function coefficient in J mL-1"]=100.
+        self["strain energy density function exponential coefficient in fiber direction"]=29.9
+        self["strain energy density function exponential coefficient in fiber sheetlet direction"]=13.3
+        self["strain energy density function exponential coefficient in fiber normal direction"]=13.3
+        self["strain energy density function exponential coefficient in cross fiber normal and fiber sheetlet direction"]=26.6
+        self["strain energy density function exponential coefficient in cross fiber and fiber sheetlet direction"]=53.2
+        self["strain energy density function exponential coefficient in cross fiber and fiber normal direction"]=53.2
         
-        self['fiberSheetletAngle']=0.
-        self['fiberSheetletWidth']=0.
-        self['radialFiberAngle']=0.
+        self['LV fiber sheetlet angle in degrees']=0.
+        self['LV fiber sheetlet width']=0.
+        self['LV fiber radial angle in degrees']=0.
         #Active Material
         if defaultAge[:5]=='adult':
-            self['BCL'] = 800.0 #set for the duration of cardiac cycle value is in ms, for fetal is 400ms. for adult is 800ms
-            self['Ca0'] = 4.35 #peak intracellular calcium concentration, µM
-            self['Ca0max'] = 4.35 #maximum peak intracellular calcium concentration, µM 
-            self['B'] = 4.75 #governs shape of peak isometric tension-sarcomere length relation, µm−1
-            self['t0'] = 300.5#238 #200.5#170 #132.5 #time to peak tension, ms
-            self['l0'] = 1.58#1.58 #sarcomere length at which no active tension develops,µm
-            self['m'] = 1048#1049 #slope of linear relaxation duration-sarcomere length relation, ms µm−1
-            self['b'] = -1600#-1429 #time-intercept of linear relaxation duration-sarcomere length relation, ms
-            self['endo_angle']=80.
-            self['epi_angle']=-70.
-            self['T0_LV'] = 200.7e3
+            self['duration of one cardiac cycle in ms'] = 800.0 #set for the duration of cardiac cycle value is in ms, for fetal is 400ms. for adult is 800ms
+            self['peak intracellular calcium concentration in uM'] = 4.35 #peak intracellular calcium concentration, uM
+            self['maximum peak intracellular calcium concentration in uM'] = 4.35 #maximum peak intracellular calcium concentration, uM 
+            self['exponential coefficient for relation of peak isometric tension and sarcomere length in um-1'] = 4.75 #governs shape of peak isometric tension-sarcomere length relation, um-1
+            for cavity in ["LA","RA","LV","RV"]:
+                self['time to maximum '+cavity+' fiber tension in ms'] = 300.5#238 #200.5#170 #132.5 #time to peak tension, ms
+            self['LV sarcomere length threshold where no tension develops']= 1.58
+            #self['LV sarcomere stretch ratio threshold where no tension develops'] = 1.58/self['LV sarcomere length']#1.58 #sarcomere length at which no active tension develops,um
+            self['slope of linear relation of relaxation duration and sarcomere length in ms um-1'] = 1048#1049 #slope of linear relaxation duration-sarcomere length relation, ms um-1
+            self['time intercept of linear relation of relaxation duration and sarcomere length in ms'] = -1600#-1429 #time-intercept of linear relaxation duration-sarcomere length relation, ms
+            self['LV endocardial fiber angle in degrees']=80.
+            self['LV epicardial fiber angle in degrees']=-70.
+            self['maximum LV fiber tension in Pa'] = 200.7e3
         else:
-            self['BCL'] = 400.0 #set for the duration of cardiac cycle value is in ms, for fetal is 400ms. for adult is 800ms
-            self['Ca0'] = 4.35 #peak intracellular calcium concentration, µM
-            self['Ca0max'] = 4.35 #maximum peak intracellular calcium concentration, µM 
-            self['B'] = 4.75 #governs shape of peak isometric tension-sarcomere length relation, µm−1
-            self['t0'] = 140.5#238 #150.5#170 #132.5 #time to peak tension, ms
-            self['l0'] = 1.58#1.58 #sarcomere length at which no active tension develops,µm
-            self['m'] = 1048*0.5#1049 #slope of linear relaxation duration-sarcomere length relation, ms µm−1
-            self['b'] = -1600*0.5#0.5*(m_adult*l0+b_adult)-m_fetal #time-intercept of linear relaxation duration-sarcomere length relation, ms
-            self['endo_angle']=60.
-            self['epi_angle']=-60.
-            self['T0_LV'] = 60e3
+            self['duration of one cardiac cycle in ms'] = 400.0 #set for the duration of cardiac cycle value is in ms, for fetal is 400ms. for adult is 800ms
+            self['peak intracellular calcium concentration in uM'] = 4.35 #peak intracellular calcium concentration, uM
+            self['maximum peak intracellular calcium concentration in uM'] = 4.35 #maximum peak intracellular calcium concentration, uM 
+            self['exponential coefficient for relation of peak isometric tension and sarcomere length in um-1'] = 4.75 #governs shape of peak isometric tension-sarcomere length relation, um-1
+            for cavity in ["LA","RA","LV","RV"]:
+                self['time to maximum '+cavity+' fiber tension in ms'] = 140.5#238 #150.5#170 #132.5 #time to peak tension, ms
+            self['LV sarcomere length threshold where no tension develops']= 1.58
+            #self['LV sarcomere stretch ratio threshold where no tension develops'] = 1.58/self['LV sarcomere length']#1.58 #sarcomere length at which no active tension develops,um
+            self['slope of linear relation of relaxation duration and sarcomere length in ms um-1'] = 1048*0.5#1049 #slope of linear relaxation duration-sarcomere length relation, ms um-1
+            self['time intercept of linear relation of relaxation duration and sarcomere length in ms'] = -1600*0.5#0.5*(m_adult*l0+b_adult)-m_fetal #time-intercept of linear relaxation duration-sarcomere length relation, ms
+            self['LV endocardial fiber angle in degrees']=60.
+            self['LV epicardial fiber angle in degrees']=-60.
+            self['maximum LV fiber tension in Pa'] = 60e3
         self.setDefaultWindkessel(defaultAge)
         self.changeDefaultParameters(defaultParameters)
+            
+    def duplicate(self):
+        return heartParameters(defaultParameters=self.copy())
+    def __add__(self,addDict):
+        temp=self.duplicate()
+        tempDict=addDict.copy()
+        for key in addDict:
+            temp[key]=tempDict[key]
+        return temp
     def setHeartrate(self,beatsperminute):
-        self['BCL'] =60000./beatsperminute
-        self['t0']=self['BCL']*0.375+0.5
-        self['m']=self['BCL']/800.*1048.
-        self['b']=self['BCL']/800.*-1600.
+        self['duration of one cardiac cycle in ms'] =60000./beatsperminute
+        self['peak intracellular calcium concentration in uM']=self['duration of one cardiac cycle in ms']*0.375+0.5
+        self['slope of linear relation of relaxation duration and sarcomere length in ms um-1']=self['duration of one cardiac cycle in ms']/800.*1048.
+        self['time intercept of linear relation of relaxation duration and sarcomere length in ms']=self['duration of one cardiac cycle in ms']/800.*-1600.
     def setDefaultWindkessel(self,modelString):
         if modelString=='adult':
+            raise Exception('Adult model not supported in this version.')
             self['AV'] = 160.0 #this is value set for left atrium which will be used in below 
         
             #### For Calculating P_LA ######################################## 
+            '''
             self['Ees_la'] = 60*1e0; #LCL #this is value for End-systolic elastance for left atrium Pa/m 
             self['A_la'] = 58.05*10; #LCL #Scaling factor for EDPVR Pa
             self['B_la'] = 0.049; #Exponent for EDPVR mL-1
@@ -223,9 +263,42 @@ class heartParameters(dict):
             self['V_ven'] = 92.5#37*10*2*12; #this is value for volume of vein mL
             self['V_art'] = 18.5#74*2.5;#440 #this is value for volume of arteries mL
             self['V_LA'] = 0.3#1.2*20; #this is value for volume of left atrium mL
+            '''
+            
+            #for ngspice
+            self['lac'] =1.
+            self['artc'] =0.0032
+            self['venc'] =0.28
+
+            self['lvartl'] =0.0 *(1000.**2)
+            self['artvenl'] =0.0 *(1000.**2)
+            self['venlal'] =0.0 *(1000.**2)
+            
+            self['lvartr'] =500. *(1000.)
+            self['artvenr'] =6000. *(1000.)
+            self['venlar'] =100. *(1000.)
+            
+            self['lalavalvr'] =200.0 *(1000.)
+            
+            self['lalavalvk'] =0.002 *(1000.**2)
+            self['lvlvvalvk'] =0.001 *(1000.**2)
+            
+            self['lalavalvb'] =2.
+            self['lvlvvalvb'] =2.
+            
+            self['lvregurgevalveratio']=-1
+            self['aaregurgevalveratio']=-1
+            self['rvregurgevalveratio']=-1
+            self['pa1regurgevalveratio']=-1
+            
+            self['reference ngspice circuit filename']='simpleLV'
         elif modelString[:5]=='fetal':
-            self['Windkessel_scale_T0_LV']=1.
-            self['Aortic_stenosis']=1.
+            #resistance r in mmHg ms mL-1
+            #resistance k in mmHg ms2 mL-1
+            #compliance c in mmHg mL-1
+            #inertance l in mmHg ms2 mL-1
+            self['Windkessel circuit to use']='full'
+            self['scale Windkessel active pressure']=1.
             
             self['aac'] =0.05
             self['ao1c'] =0.08
@@ -248,56 +321,59 @@ class heartParameters(dict):
             self['ivcc'] =0.6
             self['rac'] =2.
             self['lac'] =1.
+            
+            self['rvc'] =2.
+            self['lvc'] =2.
 
-            self['dal'] =0.006
-            self['ao1cal'] =0.08
-            self['aaao1l'] =0.002
-            self['pa1pa2l'] =0.002
-            self['raravalvl'] =0.0016
-            self['lalavalvl'] =0.0016
-            self['rvrvvalvl'] =0.
-            self['lvlvvalvl'] =0.
+            self['dal'] =0.006 *(1000.**2)
+            self['ao1cal'] =0.08 *(1000.**2)
+            self['aaao1l'] =0.002 *(1000.**2)
+            self['pa1pa2l'] =0.002 *(1000.**2)
+            self['raravalvl'] =0.0016 *(1000.**2)
+            self['lalavalvl'] =0.0016 *(1000.**2)
+            self['rvrvvalvl'] =0. *(1000.**2)
+            self['lvlvvalvl'] =0. *(1000.**2)
             
-            self['aaao1r'] =0.12
-            self['ao1ao2r'] =0.4
-            self['ao2ao3r'] =0.04
-            self['ao3ao4r'] =0.06
-            self['pa1pa2r'] =0.07
-            self['pa2lungr'] =13.5
-            self['dar'] =0.01
-            self['ao1car'] =0.3
-            self['cabrr'] =3.
-            self['brsvcr'] =8.5
-            self['ao1ubr'] =8.
-            self['ubsvcr'] =4.9
-            self['ao3her'] =81.
-            self['ao3inter'] =34
-            self['inteher'] =7
-            self['ao3kidr'] =3.5
-            self['kidivcr'] =14
-            self['ao4placr'] =3.9
-            self['placuvr'] =3.4
-            self['ao4legr'] =3.5
-            self['legivcr'] =0.6
-            self['uvher'] =0.5
-            self['heivcr'] =0.16
-            self['dvr'] =1.3
-            self['svcrar'] =0.2
-            self['ivcrar'] =0.12
-            self['lunglar'] =2
-            self['for'] =0.
-            self['raravalvr'] =0.
-            self['rvrvvalvr'] =0.08
-            self['lvlvvalvr'] =0.08
-            self['lalavalvr'] =0.
+            self['aaao1r'] =0.12 *(1000.)
+            self['ao1ao2r'] =0.4 *(1000.)
+            self['ao2ao3r'] =0.04 *(1000.)
+            self['ao3ao4r'] =0.06 *(1000.)
+            self['pa1pa2r'] =0.07 *(1000.)
+            self['pa2lungr'] =13.5 *(1000.)
+            self['dar'] =0.01 *(1000.)
+            self['ao1car'] =0.3 *(1000.)
+            self['cabrr'] =3. *(1000.)
+            self['brsvcr'] =8.5 *(1000.)
+            self['ao1ubr'] =8. *(1000.)
+            self['ubsvcr'] =4.9 *(1000.)
+            self['ao3her'] =81. *(1000.)
+            self['ao3inter'] =34 *(1000.)
+            self['inteher'] =7 *(1000.)
+            self['ao3kidr'] =3.5 *(1000.)
+            self['kidivcr'] =14 *(1000.)
+            self['ao4placr'] =3.9 *(1000.)
+            self['placuvr'] =3.4 *(1000.)
+            self['ao4legr'] =3.5 *(1000.)
+            self['legivcr'] =0.6 *(1000.)
+            self['uvher'] =0.5 *(1000.)
+            self['heivcr'] =0.16 *(1000.)
+            self['dvr'] =1.3 *(1000.)
+            self['svcrar'] =0.2 *(1000.)
+            self['ivcrar'] =0.12 *(1000.)
+            self['lunglar'] =2 *(1000.)
+            self['for'] =0. *(1000.)
+            self['raravalvr'] =0. *(1000.)
+            self['rvrvvalvr'] =0.08 *(1000.)
+            self['lvlvvalvr'] =0.08 *(1000.)
+            self['lalavalvr'] =0. *(1000.)
             
-            self['fok'] =0.4
-            self['dak'] =0.009
-            self['dvk'] =0.26
-            self['raravalvk'] =0.002
-            self['rvrvvalvk'] =0.001
-            self['lalavalvk'] =0.002
-            self['lvlvvalvk'] =0.001
+            self['fok'] =0.4 *(1000.**2)
+            self['dak'] =0.009 *(1000.**2)
+            self['dvk'] =0.26 *(1000.**2)
+            self['raravalvk'] =0.002 *(1000.**2)
+            self['rvrvvalvk'] =0.001 *(1000.**2)
+            self['lalavalvk'] =0.002 *(1000.**2)
+            self['lvlvvalvk'] =0.001 *(1000.**2)
             
             self['fob'] =0.625
             self['dab'] =2.
@@ -312,26 +388,28 @@ class heartParameters(dict):
             self['rvregurgevalveratio']=-1
             self['pa1regurgevalveratio']=-1
             
-            self['lasourcemode']=0
-            self['rasourcemode']=0
-            self['rvsourcemode']=1
-            
-            for cavity in ["LA","RA","LV","RV"]:
-                self[cavity.lower()+'amp']=0
-                self[cavity.lower()+'peaktime']=1
-                self[cavity.lower()+'width']=1
-                for n in range(1,5):
-                    self[cavity.lower()+'uamp'+str(n)]=0
-                    self[cavity.lower()+'uphase'+str(n)]=0
-            
-            self['ES_time']=None
-            self['vla0']=None
-            self['vra0']=None
-            
             self.scaleWinkessel({'default':defaultAdjustmentToScaling['r_scale']},compstr='r')
             self.scaleWinkessel({'default':defaultAdjustmentToScaling['c_scale']},compstr='c')
             if len(modelString)>5:
                 self.scaleWinkesselwithAge(float(modelString[5:]))
+            
+            self['reference ngspice circuit filename']='LV'
+        self['duration of LV diastole in ms']=None
+        self['vla0']=None
+        self['vra0']=None
+        
+        for cavity in ["LA","RA","LV","RV"]:
+            self['Windkessel '+cavity+' source file']='./'+cavity.lower()+'ufile.txt'
+            self['Windkessel '+cavity+' source pulse function peak pressure in mmHg']=0
+            self['Windkessel '+cavity+' source pulse function time at peak pressure in ms']=1
+            self['Windkessel '+cavity+' source pulse function pressure pulse width in ms']=1
+            for n in range(4):
+                self['Windkessel '+cavity+' source fourier function sine amplitude term '+str(n)]=0.
+                self['Windkessel '+cavity+' source fourier function sine degree phase term '+str(n)]=0.
+        self['Windkessel LA source function']='pulse'
+        self['Windkessel RA source function']='pulse'
+        self['Windkessel LV source function']='pressure 2D table with tracking of relaxation phase'
+        self['Windkessel RV source function']='fourier current'
     def getParameterRelation(self,parameterStringList,return_integer=True):
         '''
         get a list of intergers which
@@ -383,14 +461,14 @@ class heartParameters(dict):
         set poweradjustDict to enable default
         '''
         if poweradjustDict is None:
-            poweradjustDict={'r':defaultAdjustmentToScaling['R_adj'],'c':defaultAdjustmentToScaling['C_adj']}
+            poweradjustDict={}
         if compstr!='':
             for comp in WindkesselComponents + WindkessellinkComponents:
                 if comp+compstr in self:
                     if comp+compstr in defaultAgeScalePower:
                         agepower=defaultAgeScalePower[comp+compstr]
                     else:
-                        agepower=defaultAgeScalePower['default'+compstr]
+                        agepower=defaultAgeScalePower['default'+compstr]#1.33
                     if comp+compstr in poweradjustDict:
                         agepower-=defaultAgeScalePower['default'+compstr]-poweradjustDict[comp+compstr]*defaultAgeScalePower['default'+compstr]
                     elif compstr in poweradjustDict:
@@ -409,6 +487,84 @@ class heartParameters(dict):
             for key in self.keys():
                 if key in editParameters:
                     self[key]=editParameters[key]
+    def searchParameter(self,parameterString,returnTop=3):
+        if parameterString in self.keys():
+            if returnTop<1:
+                return parameterString
+            else:
+                return [parameterString]
+        wordList=parameterString.split(' ')
+        searchScore=[]
+        keys=self.keys()
+        for key in keys:
+            searchScore_temp=[0,0]
+            text_all=key.split(' ')
+            for word in wordList:
+                if word in text_all:
+                    temp_best_score=1.
+                else:
+                    temp_best_score=0.
+                    for text in text_all:
+                        if (word in text):
+                            new_best_score=float(len(word))/len(text)
+                            if temp_best_score<new_best_score:
+                                temp_best_score=new_best_score
+                if temp_best_score>0:
+                    searchScore_temp[0]+=temp_best_score
+                else:
+                    searchScore_temp[1]+=1
+            searchScore_temp[1]=(len(wordList)-searchScore_temp[1])/len(wordList)
+            searchScore.append(np.round(searchScore_temp[0])+searchScore_temp[1])
+        if returnTop<1:
+            return list(keys)[np.argmax(searchScore)]
+        elif returnTop<=-1:
+            return list(keys)[np.argsort(searchScore)[::-1]]
+        else:
+            return list(keys)[np.argsort(searchScore)[::-1][:int(returnTop)]]            
+    def setParameter(self,parameterString,value):
+        key=self.searchParameter(parameterString,returnTop=0)
+        self[key]=value
+        logger.info('set '+key+" = "+repr(value))
+    def decodeStringValue(self,strVal):
+        if strVal[-1]=='\n':
+            strVal=strVal[:-1]
+        while strVal[-1]==' ':
+            strVal=strVal[:-1]
+        while strVal[0]==' ':
+            strVal=strVal[1:]
+        if strVal == 'None':
+            return None
+        elif strVal[0]=='[' and strVal[0]==']':
+            temp=strVal.split(', ')
+            for n in range(len(temp)):
+                temp[n]=self.decodeStringValue(temp[n])
+            return temp
+        else:
+            try:
+                temp=int(strVal)
+            except:
+                try:
+                    temp=float(strVal)
+                except:
+                    temp=strVal
+            return temp
+    def readParameters(self,file):
+        parameters={}
+        with open(file, "r") as f:
+            lines=f.readlines()
+        for line in lines:
+            if line[0]=='#':
+                continue
+            temp=line.split(sep=' , ')
+            parameters[temp[0]]=self.decodeStringValue(temp[1])
+        for key in parameters:
+            self.setParameter(key,parameters[key])
+    def writeParameters(self,file):
+        folder,filename = os.path.split(file)
+        os.makedirs(folder,exist_ok=True)
+        with open(file, "w") as f:
+            for key, val in self.items():
+                f.write("{0:s} , {1:s}\n".format(key,str(val)))
     def getFetalPopulation_LVEDP(self,ageInWeeks):
         #from P Johnsona, D J Maxwellb, M J Tynanb, L D Allanc, "Intracardiac pressures in the human fetus"
         return 0.7018*ageInWeeks-7.62928682
