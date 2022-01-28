@@ -48,8 +48,10 @@ History:
                                                             - added trackphase and updatephase
   Author: w.x.chan@gmail.com         20OCT2021           - v3.6.1
                                                             - added  input of endo and epi angles as file with columns x,y,z,angle
+  Author: w.x.chan@gmail.com         25Dec2021           - v4.0.0
+                                                            - added addBiVfiber into vtk
 '''
-_version='3.6.1'
+_version='4.0.0'
 
 import sys
 
@@ -61,18 +63,19 @@ try:
 except:
     from fenics import *
 import numpy as np
-from heartFEM.lcleeHeart.forms_shavik import Forms
-from heartFEM.lcleeHeart.simpleActiveMaterial import SimpleActiveMaterial as Active
-from heartFEM.lcleeHeart.nsolver import NSolver as NSolver 
-from heartFEM.lcleeHeart.addfiber_matid import *
+from .forms_shavik import Forms
+from .simpleActiveMaterial import SimpleActiveMaterial as Active
+from .nsolver import NSolver as NSolver 
+from .addfiber_matid import *
 
 import vtk
-from heartFEM.lcleeHeart import vtk_py as vtk_py
+#from . import vtk_py as vtk_py
+import vtk_py3 as vtk_py
 from mpi4py import MPI as pyMPI
-from heartFEM.lcleeHeart.rotateUGrid_w_axis import rotateUGrid_w_axis
+from .rotateUGrid_w_axis import rotateUGrid_w_axis
 from pyquaternion import Quaternion
 
-def generateMesh(casePath,stlname,Laxis,endo_angle='',epi_angle='',fiberSheetletAngle=0.,fiberSheetletWidth=0.,radialFiberAngle=0.,fiberLength=0.,clipratio=0.75,meshsize=0.6,meshname=None,saveSubFolder=''):
+def generateMesh(casePath,stlname,Laxis,endo_angle='',epi_angle='',fiberSheetletAngle=0.,fiberSheetletWidth=0.,radialFiberAngle=0.,fiberLength=0.,clipratio=0.75,meshsize=0.6,meshname=None,saveSubFolder='',RV_vector=None):
     if meshname is None:
         meshname=stlname
     Laxis = Laxis / np.linalg.norm(Laxis)
@@ -102,6 +105,17 @@ def generateMesh(casePath,stlname,Laxis,endo_angle='',epi_angle='',fiberSheetlet
     transformation_matrix_R[:3,0]=my_quaternion.rotate(np.array([1,0,0]))
     transformation_matrix_R[:3,1]=my_quaternion.rotate(np.array([0,1,0]))
     transformation_matrix_R[:3,2]=my_quaternion.rotate(np.array([0,0,1]))
+    if RV_vector is not None:
+        RV_vector2=my_quaternion.rotate(np.array(RV_vector))
+        angle2 = -np.arcsin(RV_vector2[1]/np.linalg.norm(RV_vector2[:2]))
+        rotatedpdata = vtk_py.rotatePData_w_axis(rotatedpdata, angle2, np.array([0,0,1]))
+        my_quaternion2 = Quaternion(axis=np.array([0,0,1]), angle=angle2)
+        transformation_matrix_R2=np.zeros((4,4))
+        transformation_matrix_R2[3,3]=1.
+        transformation_matrix_R2[:3,0]=my_quaternion2.rotate(np.array([1,0,0]))
+        transformation_matrix_R2[:3,1]=my_quaternion2.rotate(np.array([0,1,0]))
+        transformation_matrix_R2[:3,2]=my_quaternion2.rotate(np.array([0,0,1]))
+        transformation_matrix_R=transformation_matrix_R2.dot(transformation_matrix_R)
     
     if not(isinstance(clipratio,float)):
         clipratio=(transformation_matrix_R.dot(clipratio.reshape((-1,1))).reshape(-1)[2]-rotatedpdata.GetBounds()[4])/(rotatedpdata.GetBounds()[5]-rotatedpdata.GetBounds()[4])
@@ -115,8 +129,10 @@ def generateMesh(casePath,stlname,Laxis,endo_angle='',epi_angle='',fiberSheetlet
     clippedheart = vtk_py.clipheart(rotatedpdata, C, [0,0,1],isinsideout, True) 
 
     vtk_py.writeSTL(clippedheart, casePath+saveSubFolder+"/TEST2.stl")
-	
-    epi, endo= vtk_py.splitDomainBetweenEndoAndEpi(clippedheart)
+    if RV_vector is not None:
+        epi, endo2 , endo= vtk_py.splitDomainBetweenEndoAndEpi(clippedheart,RV=True)
+    else:
+        epi, endo= vtk_py.splitDomainBetweenEndoAndEpi(clippedheart)
 
     cleanepipdata = vtk.vtkCleanPolyData()
     if (vtk.vtkVersion.GetVTKMajorVersion() >= 6):
@@ -139,12 +155,43 @@ def generateMesh(casePath,stlname,Laxis,endo_angle='',epi_angle='',fiberSheetlet
     endofile = casePath+saveSubFolder+"/endo_lv" +'.stl'
     epifile = casePath+saveSubFolder+"/epi_lv" +'.stl'
    
+    if (abs(cleanendo.GetBounds()[5] - cleanendo.GetBounds()[4]) > abs(cleanepi.GetBounds()[5] - cleanepi.GetBounds()[4])):
+        temp = cleanendo
+        cleanendo = cleanepi
+        cleanepi = temp
+    
+    
+    if RV_vector is not None:
+        cleanendo2pdata = vtk.vtkCleanPolyData()
+        if (vtk.vtkVersion.GetVTKMajorVersion() >= 6):
+            cleanendo2pdata.SetInputData(endo2)
+        else:
+            cleanendo2pdata.SetInput(endo2)
+        cleanendo2pdata.Update()
+        cleanendo2 = cleanendo2pdata.GetOutput()	
+        
+        if (abs(cleanendo2.GetBounds()[5] - cleanendo2.GetBounds()[4]) > abs(cleanepi.GetBounds()[5] - cleanepi.GetBounds()[4])):
+            temp = cleanendo2
+            cleanendo2 = cleanepi
+            cleanepi = temp
+        if (cleanendo2.GetBounds()[1] > cleanendo.GetBounds()[1]):
+            temp = cleanendo
+            cleanendo = cleanendo2
+            cleanendo2 = temp
+        #points_AB = getABPointsFromBoundsAndCenter(cleanepi, verbose)
+        
+        endo2file = casePath+saveSubFolder+"/endo_rv" +'.stl'
+        vtk_py.writeSTL(cleanendo2, endo2file)
+
     vtk_py.writeSTL(cleanepi, epifile)
     vtk_py.writeSTL(cleanendo, endofile)
-   
+    
     filename = casePath+saveSubFolder+'/New_mesh' 
-   
-    vtk_py.createLVmesh(filename, meshsize, casePath+saveSubFolder+"/epi_lv.stl", casePath+saveSubFolder+"/endo_lv.stl")
+    
+    if RV_vector is not None:
+        vtk_py.create_BiVmesh(casePath+saveSubFolder+"/epi_lv.stl", casePath+saveSubFolder+"/endo_lv.stl",casePath+saveSubFolder+"/endo_rv.stl", casename=filename, meshsize=meshsize)
+    else:
+        vtk_py.createLVmesh(filename, meshsize, casePath+saveSubFolder+"/epi_lv.stl", casePath+saveSubFolder+"/endo_lv.stl")
    
    
     ugridfilename = filename + '.vtk'
@@ -165,10 +212,11 @@ def generateMesh(casePath,stlname,Laxis,endo_angle='',epi_angle='',fiberSheetlet
     
     vtk_py.writeUGrid(rugrid,casePath+saveSubFolder+"/rtemp.vtk")
    
-   	
-    fenics_mesh_ref, fenics_facet_ref, fenics_edge_ref = vtk_py.extractFeNiCsBiVFacet(rugrid,savePath=casePath+saveSubFolder+'/', geometry = "LV")
-   
-   	
+    if RV_vector is not None:
+        fenics_mesh_ref, fenics_facet_ref, fenics_edge_ref = vtk_py.extractFeNiCsBiVFacet(rugrid,savePath=casePath+saveSubFolder+'/', geometry = "BiV")
+    else:
+        fenics_mesh_ref, fenics_facet_ref, fenics_edge_ref = vtk_py.extractFeNiCsBiVFacet(rugrid,savePath=casePath+saveSubFolder+'/', geometry = "LV")
+
     matid = MeshFunction('size_t',fenics_mesh_ref, 3, mesh.domains())
    
    	
@@ -209,12 +257,20 @@ def generateMesh(casePath,stlname,Laxis,endo_angle='',epi_angle='',fiberSheetlet
     isendoflip = True #True
     casedir=casePath+saveSubFolder+"/"+meshname+"_";  
    
-    ef, es, en, eC, eL, eR = vtk_py.addLVfiber(mesh, fiberFS, "lv", endo_angle, epi_angle, casedir,fiberSheetletAngle=fiberSheetletAngle,fiberSheetletWidth=fiberSheetletWidth,radialFiberAngle=radialFiberAngle,fiberLength=fiberLength)
-   
     matid_filename = casePath+saveSubFolder+'/'+meshname + "_matid.pvd"
     File(matid_filename) << matid
+    
+    File(casePath+saveSubFolder+"/facetboundaries"+".pvd") << fenics_facet_ref
+    File(casePath+saveSubFolder+"/edgeboundaries"+".pvd") << fenics_edge_ref
+    File(casePath+saveSubFolder+"/mesh" + ".pvd") << mesh
+    File(casePath+saveSubFolder+"/matid" +".pvd") << matid
    	
-   
+    if RV_vector is not None:
+        eC, eL, eR=vtk_py.addBiVfiber(mesh,fenics_facet_ref, 0, 0,fiberSheetletAngle=0, saveDir=casedir)
+        ef, es, en=vtk_py.addBiVfiber(mesh,fenics_facet_ref, endo_angle, epi_angle,fiberSheetletAngle=fiberSheetletAngle, saveDir=casedir)
+    else:
+        ef, es, en, eC, eL, eR = vtk_py.addLVfiber(mesh, fiberFS, "lv", endo_angle, epi_angle, casedir,fiberSheetletAngle=fiberSheetletAngle,fiberSheetletWidth=fiberSheetletWidth,radialFiberAngle=radialFiberAngle,fiberLength=fiberLength)
+    
     f = HDF5File(mesh.mpi_comm(), casePath+saveSubFolder+'/'+meshname+".hdf5", 'w')
     f.write(mesh, meshname)
     f.close()
@@ -233,10 +289,7 @@ def generateMesh(casePath,stlname,Laxis,endo_angle='',epi_angle='',fiberSheetlet
     f.close()
    
    
-    File(casePath+saveSubFolder+"/facetboundaries"+".pvd") << fenics_facet_ref
-    File(casePath+saveSubFolder+"/edgeboundaries"+".pvd") << fenics_edge_ref
-    File(casePath+saveSubFolder+"/mesh" + ".pvd") << mesh
-    File(casePath+saveSubFolder+"/matid" +".pvd") << matid
+    
    
    
    	# Rotate back fiber.vtu to check
@@ -264,7 +317,8 @@ def generateMesh(casePath,stlname,Laxis,endo_angle='',epi_angle='',fiberSheetlet
     
    
     return 0
-def changeFiberAngles(casePath,meshname,endo_angle,epi_angle,fiberSheetletAngle=0.,fiberSheetletWidth=0.,radialFiberAngle=0.,fiberLength=0.,saveSubFolder='',loadSubFolder=''):
+
+def changeFiberAngles(casePath,meshname,endo_angle,epi_angle,fiberSheetletAngle=0.,fiberSheetletWidth=0.,radialFiberAngle=0.,fiberLength=0.,RV_vector=None,saveSubFolder='',loadSubFolder=''):
     os.makedirs(casePath+saveSubFolder,exist_ok=True)
     mesh = Mesh()
     f = HDF5File(MPI.comm_world, casePath+loadSubFolder+'/'+meshname+".hdf5", 'r') 
@@ -285,13 +339,23 @@ def changeFiberAngles(casePath,meshname,endo_angle,epi_angle,fiberSheetletAngle=
     VQuadelem._quad_scheme = 'default'
     fiberFS = FunctionSpace(mesh, VQuadelem)
     casedir=casePath+saveSubFolder+"/"+meshname+"_"
-    ef, es, en, eC, eL, eR = vtk_py.addLVfiber(mesh, fiberFS, "lv", endo_angle, epi_angle, casedir,fiberSheetletAngle=fiberSheetletAngle,fiberSheetletWidth=fiberSheetletWidth,radialFiberAngle=radialFiberAngle,fiberLength=fiberLength)
     matid = MeshFunction('size_t',mesh, 3, mesh.domains())
     matid_filename = casePath+saveSubFolder+'/'+meshname + "_matid.pvd"
     if os.path.isfile(matid_filename):
         os.remove(matid_filename)
     File(matid_filename) << matid
    	
+    File(casePath+saveSubFolder+"/facetboundaries"+".pvd") << facetboundaries
+    File(casePath+saveSubFolder+"/edgeboundaries"+".pvd") << edgeboundaries
+    File(casePath+saveSubFolder+"/mesh" + ".pvd") << mesh
+    File(casePath+saveSubFolder+"/matid" +".pvd") << matid
+    if RV_vector is not None:
+        eC, eL, eR=vtk_py.addBiVfiber(mesh,facetboundaries, 0, 0,fiberSheetletAngle=0, saveDir=casedir)
+        ef, es, en=vtk_py.addBiVfiber(mesh,facetboundaries, endo_angle, epi_angle,fiberSheetletAngle=fiberSheetletAngle, saveDir=casedir)
+    else:
+        ef, es, en, eC, eL, eR = vtk_py.addLVfiber(mesh, fiberFS, "lv", endo_angle, epi_angle, casedir,fiberSheetletAngle=fiberSheetletAngle,fiberSheetletWidth=fiberSheetletWidth,radialFiberAngle=radialFiberAngle,fiberLength=fiberLength)
+    
+    
     if os.path.isfile(casePath+saveSubFolder+'/'+meshname+".hdf5"):
         os.remove(casePath+saveSubFolder+'/'+meshname+".hdf5")
     f = HDF5File(mesh.mpi_comm(), casePath+saveSubFolder+'/'+meshname+".hdf5", 'w')
@@ -312,19 +376,15 @@ def changeFiberAngles(casePath,meshname,endo_angle,epi_angle,fiberSheetletAngle=
     f.close()
    
    
-    File(casePath+saveSubFolder+"/facetboundaries"+".pvd") << facetboundaries
-    File(casePath+saveSubFolder+"/edgeboundaries"+".pvd") << edgeboundaries
-    File(casePath+saveSubFolder+"/mesh" + ".pvd") << mesh
-    File(casePath+saveSubFolder+"/matid" +".pvd") << matid
    
     return 0
 class heart:
     def __new__(cls, *args, **kwargs):
         return super().__new__(cls)
-    def __init__(self,casename,meshname,runParameters,PVinput='volume',inverseHeart=False,trackphase=False):
+    def __init__(self,casename,meshname,runParameters,inverseHeart=False,trackphase=False):
         self.inverseHeart=inverseHeart
         self.trackphase=trackphase
-        self.backup=(casename,meshname,dict(runParameters),PVinput)
+        self.backup=(casename,meshname,dict(runParameters))
         runParameters=dict(runParameters)
         parameters["form_compiler"]["quadrature_degree"]=4
         parameters["form_compiler"]["representation"] = "uflacs"
@@ -458,7 +518,6 @@ class heart:
         
         self.t_a = Expression(("t_a"), t_a=0.0, degree=1)
         self.dt = Expression(("dt"), dt=0.0, degree=1)
-        Tact = Constant(runParameters['Tact_constant'])
         T0_LV = runParameters['T0_LV']
         
         params= {"mesh": self.mesh,

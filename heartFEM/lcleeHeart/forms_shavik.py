@@ -116,7 +116,6 @@ class Forms(object):
 		Efn_inv = inner(f0, Ea_inv*n0)
 		Ens_inv = inner(n0, Ea_inv*s0)
 		
-		
 		QQ = Cff*pow(Eff,2.0) + Css*pow(Ess,2.0)+ Cnn*pow(Enn,2.0)+ Cns*pow(Ens,2.0) + Cfs*pow(Efs,2.0) + Cfn*pow(Efn,2.0) #Original
 		if inverse:  
 		    #pendo = self.parameters["volconst_variable"] 
@@ -209,9 +208,12 @@ class Forms(object):
 		f0 = self.parameters["fiber"]
 		s0 = self.parameters["sheet"]
 		n0 = self.parameters["sheet-normal"]
-		bff = 29.9 #self.parameters["bff"]
-		bfx = 13.3#self.parameters["bfx"]
-		bxx = 26.6 #self.parameters["bxx"]
+		Cff=self.parameters["StrainEnergyDensityFunction_Cff"]
+		Css=self.parameters["StrainEnergyDensityFunction_Css"]
+		Cnn=self.parameters["StrainEnergyDensityFunction_Cnn"]
+		Cns=self.parameters["StrainEnergyDensityFunction_Cns"]
+		Cfs=self.parameters["StrainEnergyDensityFunction_Cfs"]
+		Cfn=self.parameters["StrainEnergyDensityFunction_Cfn"]
 		#Kappa = self.parameters["Kappa"]
 		#isincomp = self.parameters["incompressible"]
 
@@ -235,7 +237,7 @@ class Forms(object):
 		
 		
 		#QQ = bff*pow(Eff,2.0) + bfx*(pow(Ess,2.0)+ pow(Enn,2.0)+ 2.0*pow(Ens,2.0)) + bxx*(2.0*pow(Efs,2.0) + 2.0*pow(Efn,2.0))
-		QQ = bff*Eff**2.0 + bfx*(Ess**2.0 + Enn**2.0 + 2.0*Ens**2.0) + bxx*(2.0*Efs**2.0 + 2.0*Efn**2.0)
+		QQ = Cff*Eff**2.0 + Css*Ess**2.0 + Cnn*Enn**2.0 + Cns**Ens**2.0 + Cfs**Efs**2.0 + Cfn*Efn**2.0
 		Wp = Cstrain*(exp(QQ) -  1.0) - p*(J - 1.0)
 		#E = dolfin.variable(Ea)
 		sigma =  (1.0/J)*dolfin.diff(Wp,F)*F.T

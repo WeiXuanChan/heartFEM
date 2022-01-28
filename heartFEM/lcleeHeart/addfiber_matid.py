@@ -1,6 +1,6 @@
 from dolfin import *
 import vtk as vtk
-from heartFEM.lcleeHeart.vtk_py import *
+from vtk_py3 import *
 
 def addfiber_matid(mesh, V, casename, endo_angle, epi_angle,  infarct_endo_angle, infarct_epi_angle, casedir, matid, isepiflip, isendoflip):
 
