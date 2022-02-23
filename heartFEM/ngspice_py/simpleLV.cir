@@ -29,7 +29,7 @@ Elvregurgitationvalveratio lvregurgitationvalveratio gnd vol = ' <<lvregurgevalv
 Eaaregurgitationvalveratio aaregurgitationvalveratio gnd vol = ' <<aaregurgevalveratio>> '
 Etime timecyclic gnd vol = 'v(heartperiod) *v(heartphase)/2/PI'
 
-Vlaprobe lagnd lagnd2 dc 0
+Vlaprobe la    lagnd dc 0
 Vlvprobe lv    lvgnd  dc 0
 
 .if (lasourcemode == 0)
