@@ -51,14 +51,14 @@ hr.defaultParameters.setParameter('LV end diastolic volume in mL',EDV)
 hr.defaultParameters.setParameter('strain energy density function coefficient in Pa',100.)
 # mode set to getting LV behaviour table
 hr.defaultRunMode='LVbehaviorRun'
-hr.(editParameters=None,
-    unloadGeo=unload_geometry,
-    minESV={"LV":ESV*0.95}, # it is better to set slightly lower than ESV if you are planning to use windkessel  
-    maxEDV={"LV":EDV*1.05},
-    volstep=50, #discretise results calculation between minESV and maxEDV
-    multicpu=1, #set number of cpu to use
-    outputResultList=None, #set outputResultList=["displacement"] to get the displacement results
-    behavior_only=True) # True if you do not want to run windkessel
-
+runParam={"editParameters":None,
+          "unloadGeo":unload_geometry,
+          "minESV":{"LV":ESV*0.95}, # it is better to set slightly lower than ESV if you are planning to use windkessel  
+          "maxEDV":{"LV":EDV*1.05},
+          "volstep":50, #discretise results calculation between minESV and maxEDV
+          "multicpu":1, #set number of cpu to use
+          "outputResultList":None, #set outputResultList=["displacement"] to get the displacement results
+          "behavior_only":True} # True if you do not want to run windkessel
+hr(runParam)
 
 
