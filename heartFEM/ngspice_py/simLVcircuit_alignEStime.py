@@ -26,10 +26,22 @@ import sys
 import vtk
 import os
 import inspect
-from heartFEM import ngspice_py
+from . import simLVcircuit
 import numpy as np
 from scipy import interpolate
 ########################################################################
+
+def get_specific_cir_results(file,varList):
+    with open(file,'r') as f:
+        fk=f.readline().strip()
+    fk=fk.split(' ')
+    fk=np.array([x for x in fk if x!=''])
+    column=[]
+    for n in varList:
+        column.append(np.argmax(fk==n))
+        if not(np.max(fk==n)):
+            logger.warning('Column '+n+' not found in '+file)
+    return np.array(column).astype(int)
 
 def simLVcircuit_alignEStime(casename,stopTime,sourcefileDict,period,targetEStime,init_timetopeaktension,try_timetopeaktension=None,initLAvol=0,initRAvol=0,initLVvol=0,initRVvol=0,vla0=None,vra0=None,init_file=None,init_time=None,iterationNumber=100,verbose=True):
 
@@ -47,9 +59,10 @@ def simLVcircuit_alignEStime(casename,stopTime,sourcefileDict,period,targetEStim
         logger.info("    Trying timetopeak="+repr(try_timetopeaktension))
         case_dir,lvufilename = os.path.split(sourcefileDict['Windkessel LV source file'])
         timetopeak_from_to=[init_timetopeaktension,try_timetopeaktension]
-        ngspice_py.simLVcircuit(casename,stopTime,sourcefileDict,initLAvol=initLAvol,initRAvol=initRAvol,initLVvol=initLVvol,initRVvol=initRVvol,vla0=vla0,vra0=vra0,init_file=init_file,init_time=init_time,timetopeak_from_to=timetopeak_from_to,verbose=verbose)
+        simLVcircuit(casename,stopTime,sourcefileDict,initLAvol=initLAvol,initRAvol=initRAvol,initLVvol=initLVvol,initRVvol=initRVvol,vla0=vla0,vra0=vra0,init_file=init_file,init_time=init_time,timetopeak_from_to=timetopeak_from_to,verbose=verbose)
         
-        cir_results=np.loadtxt(case_dir+'/'+'circuit_results.txt',skiprows=1)[:,2:4]
+        var_col=get_specific_cir_results(case_dir+'/'+'circuit_results.txt',['time','v(lvvol)'])
+        cir_results=np.loadtxt(case_dir+'/'+'circuit_results.txt',skiprows=1)[:,var_col]
         while cir_results[-1,0]>=(2.*period):
             cir_results[:,0]-=period
         cir_results=cir_results[cir_results[:,0]>=0]
@@ -79,7 +92,80 @@ def simLVcircuit_alignEStime(casename,stopTime,sourcefileDict,period,targetEStim
     
     return (try_timetopeaktension,adj_timetopeaktension)
 
-def simLVcircuit_align_EDvol_and_EStime(casename,stopTime,sourcefileDict,period,targetEStime,init_timetopeaktension,try_initLVvol=None,initLAvol=0,initRAvol=0,initLVvol=0,initRVvol=0,vla0=None,vra0=None,init_file=None,init_time=None,iterationNumber=100,verbose=True):
+def simLVcircuit_align_EDvol_and_EStime(casename,stopTime,sourcefileDict,period,targetEStime,init_timetopeaktension,try_initLVvol=None,try_initRVvol=False,initLAvol=0,initRAvol=0,initLVvol=0,initRVvol=0,vla0=None,vra0=None,init_file=None,init_time=None,iterationNumber=100,verbose=True):
+    targetinitLVvol=initLVvol
+    targetinitRVvol=initRVvol
+    if try_initLVvol is None:
+        try_initLVvol=initLVvol*1.05
+        adj_try_initLVvol=0.05*targetinitLVvol
+    elif isinstance(try_initLVvol,(int,float)):
+        adj_try_initLVvol=0.05*targetinitLVvol
+    else:
+        adj_try_initLVvol=try_initLVvol[1]
+        try_initLVvol=try_initLVvol[0]
+    RVLVratio=targetinitRVvol/targetinitLVvol
+
+    tune_initLVvol=None
+    for n in range(iterationNumber):
+        logger.info("Trying initLVvol="+repr(try_initLVvol))
+        if try_initRVvol:
+            logger.info("Trying initRVvol="+repr(try_initLVvol*RVLVratio))
+        if targetEStime is None:
+            simLVcircuit(casename,stopTime,sourcefileDict,initLAvol=initLAvol,initRAvol=initRAvol,initLVvol=try_initLVvol,initRVvol=try_initLVvol*RVLVratio,vla0=vla0,vra0=vra0,init_file=init_file,init_time=init_time,verbose=verbose)
+        else:
+            if n==0:
+                try_timetopeaktension=None
+            else:
+                try_timetopeaktension=list(try_timetopeaktension)
+                try_timetopeaktension[1]=try_timetopeaktension[1]*3.
+            try_timetopeaktension=simLVcircuit_alignEStime(casename,stopTime,sourcefileDict,period,targetEStime,init_timetopeaktension,try_timetopeaktension=try_timetopeaktension,initLAvol=initLAvol,initRAvol=initRAvol,initLVvol=try_initLVvol,initRVvol=initRVvol,vla0=vla0,vra0=vra0,init_file=init_file,init_time=init_time,iterationNumber=iterationNumber,verbose=verbose)
+        case_dir,outfilename = os.path.split(casename)
+        
+        var_col=get_specific_cir_results(case_dir+'/'+'circuit_results.txt',['time','v(lvvol)','v(rvvol)'])
+        cir_results=np.loadtxt(case_dir+'/'+'circuit_results.txt',skiprows=1)[:,var_col]
+        removePeriodCount=0
+        while cir_results[-1,0]>=(2.*period):
+            cir_results[:,0]-=period
+            removePeriodCount+=1
+        cir_results=cir_results[cir_results[:,0]>=0]
+        cir_results=cir_results[cir_results[:,0]<period]
+        currentinitLVvol=cir_results[0,1]
+        currentinitRVvol=cir_results[0,2]
+        #np.savetxt(casename+'extracted_circuit_results_'+str(n)+'.txt',cir_results)
+        logger.info("  Current EDvol="+repr(currentinitLVvol)+', target EDvol='+repr(targetinitLVvol)+" , time="+repr(cir_results[0,0]+removePeriodCount*period))
+        if try_initRVvol:
+            logger.info("          RV: Current EDvol="+repr(currentinitRVvol)+', target EDvol='+repr(targetinitRVvol))
+            currentLoss=(currentinitRVvol/targetinitRVvol-1)**2.+(currentinitLVvol/targetinitLVvol-1)**2
+            currentDifferencefromtarget=currentinitRVvol/targetinitRVvol+currentinitLVvol/targetinitLVvol-2
+        else:
+            currentLoss=(currentinitLVvol/targetinitLVvol-1)**2
+            currentDifferencefromtarget=currentinitLVvol/targetinitLVvol-1
+        if currentDifferencefromtarget**2.<10.**-4.:
+            break
+        elif currentDifferencefromtarget>0:
+            if tune_initLVvol is None:
+                tune_initLVvol=-1
+                try_initLVvol=try_initLVvol/(currentDifferencefromtarget+1)
+            else:
+                if tune_initLVvol>0:
+                    tune_initLVvol=-1
+                    adj_try_initLVvol=adj_try_initLVvol*0.33
+                try_initLVvol=try_initLVvol+tune_initLVvol*adj_try_initLVvol
+        elif currentDifferencefromtarget<0:
+            if tune_initLVvol is None:
+                tune_initLVvol=1
+                try_initLVvol=try_initLVvol*targetinitLVvol/currentinitLVvol
+            else:
+                if tune_initLVvol<0:
+                    tune_initLVvol=1
+                    adj_try_initLVvol=adj_try_initLVvol*0.33
+                try_initLVvol=try_initLVvol+tune_initLVvol*adj_try_initLVvol
+    if abs(cir_results[0,-1]/cir_results[0,1]-1)>0.05:
+        logger.warning("Circuit might not converged, last cycle: start EDvol="+repr(cir_results[0,1])+', end EDvol='+repr(cir_results[0,-1]))
+    return (try_initLVvol,adj_try_initLVvol)
+
+def simLVcircuit_align_EDvol_and_EStime_dual_tune(casename,stopTime,sourcefileDict,period,targetEStime,init_timetopeaktension,try_initLVvol=None,try_initRVvol=None,initLAvol=0,initRAvol=0,initLVvol=0,initRVvol=0,vla0=None,vra0=None,init_file=None,init_time=None,iterationNumber=100,verbose=True):
+    #Depreciated
     targetinitLVvol=initLVvol
     if try_initLVvol is None:
         try_initLVvol=initLVvol*1.05
@@ -89,13 +175,30 @@ def simLVcircuit_align_EDvol_and_EStime(casename,stopTime,sourcefileDict,period,
     else:
         adj_try_initLVvol=try_initLVvol[1]
         try_initLVvol=try_initLVvol[0]
+    if try_initRVvol is not None:
+        targetinitRVvol=initRVvol
+        if try_initRVvol is True:
+            try_initRVvol=initRVvol*1.05
+            adj_try_initRVvol=0.005*targetinitRVvol
+        elif isinstance(try_initRVvol,(int,float)):
+            adj_try_initRVvol=0.005*targetinitRVvol
+        else:
+            adj_try_initRVvol=try_initRVvol[1]
+            try_initRVvol=try_initRVvol[0]
+    else:
+        try_initRVvol=initRVvol
+        adj_try_initRVvol=0.
 
     tune_initLVvol=None
     last_currentinitLVvol=0
+    tune_initRVvol=None
+    last_currentinitRVvol=0
     for n in range(iterationNumber):
         logger.info("Trying initLVvol="+repr(try_initLVvol))
+        if adj_try_initRVvol>0:
+            logger.info("Trying initRVvol="+repr(try_initRVvol))
         if targetEStime is None:
-            ngspice_py.simLVcircuit(casename,stopTime,sourcefileDict,initLAvol=initLAvol,initRAvol=initRAvol,initLVvol=try_initLVvol,initRVvol=initRVvol,vla0=vla0,vra0=vra0,init_file=init_file,init_time=init_time,verbose=verbose)
+            simLVcircuit(casename,stopTime,sourcefileDict,initLAvol=initLAvol,initRAvol=initRAvol,initLVvol=try_initLVvol,initRVvol=try_initRVvol,vla0=vla0,vra0=vra0,init_file=init_file,init_time=init_time,verbose=verbose)
         else:
             if n==0:
                 try_timetopeaktension=None
@@ -104,7 +207,8 @@ def simLVcircuit_align_EDvol_and_EStime(casename,stopTime,sourcefileDict,period,
                 try_timetopeaktension[1]=try_timetopeaktension[1]*3.
             try_timetopeaktension=simLVcircuit_alignEStime(casename,stopTime,sourcefileDict,period,targetEStime,init_timetopeaktension,try_timetopeaktension=try_timetopeaktension,initLAvol=initLAvol,initRAvol=initRAvol,initLVvol=try_initLVvol,initRVvol=initRVvol,vla0=vla0,vra0=vra0,init_file=init_file,init_time=init_time,iterationNumber=iterationNumber,verbose=verbose)
         case_dir,outfilename = os.path.split(casename)
-        cir_results=np.loadtxt(case_dir+'/'+'circuit_results.txt',skiprows=1)[:,2:4]
+        var_col=get_specific_cir_results(case_dir+'/'+'circuit_results.txt',['time','v(lvvol)','v(rvvol)'])
+        cir_results=np.loadtxt(case_dir+'/'+'circuit_results.txt',skiprows=1)[:,var_col]
         removePeriodCount=0
         while cir_results[-1,0]>=(2.*period):
             cir_results[:,0]-=period
@@ -112,9 +216,15 @@ def simLVcircuit_align_EDvol_and_EStime(casename,stopTime,sourcefileDict,period,
         cir_results=cir_results[cir_results[:,0]>=0]
         cir_results=cir_results[cir_results[:,0]<period]
         currentinitLVvol=cir_results[0,1]
+        currentinitRVvol=cir_results[0,2]
         #np.savetxt(casename+'extracted_circuit_results_'+str(n)+'.txt',cir_results)
         logger.info("  Current EDvol="+repr(currentinitLVvol)+', target EDvol='+repr(targetinitLVvol)+" , time="+repr(cir_results[0,0]+removePeriodCount*period))
-        if abs(currentinitLVvol-targetinitLVvol)<(targetinitLVvol*10.**-4.) or adj_try_initLVvol<(targetinitLVvol*10.**-5.):
+        if adj_try_initRVvol>0:
+            RVconditional=abs(currentinitRVvol-targetinitRVvol)<(targetinitRVvol*10.**-4.) or adj_try_initRVvol<(targetinitRVvol*10.**-5.)
+            logger.info("          RV: Current EDvol="+repr(currentinitRVvol)+', target EDvol='+repr(targetinitRVvol))
+        else:
+            RVconditional=True
+        if (abs(currentinitLVvol-targetinitLVvol)<(targetinitLVvol*10.**-4.) or adj_try_initLVvol<(targetinitLVvol*10.**-5.) ) and RVconditional:
             break
         elif currentinitLVvol>targetinitLVvol:
             if tune_initLVvol is None:
@@ -135,6 +245,26 @@ def simLVcircuit_align_EDvol_and_EStime(casename,stopTime,sourcefileDict,period,
                     adj_try_initLVvol=adj_try_initLVvol*0.33
                 try_initLVvol=try_initLVvol+tune_initLVvol*adj_try_initLVvol
         last_currentinitLVvol=currentinitLVvol
+        if not(RVconditional):
+            if currentinitRVvol>targetinitRVvol:
+                if tune_initRVvol is None:
+                    tune_initRVvol=-1
+                    try_initRVvol=try_initRVvol*targetinitRVvol/currentinitRVvol
+                else:
+                    if tune_initRVvol>0:
+                        tune_initRVvol=-1
+                        adj_try_initRVvol=adj_try_initRVvol*0.33
+                    try_initRVvol=try_initRVvol+tune_initRVvol*adj_try_initRVvol
+            elif currentinitRVvol<targetinitRVvol:
+                if tune_initRVvol is None:
+                    tune_initRVvol=1
+                    try_initRVvol=try_initRVvol*targetinitRVvol/currentinitRVvol
+                else:
+                    if tune_initRVvol<0:
+                        tune_initRVvol=1
+                        adj_try_initRVvol=adj_try_initRVvol*0.33
+                    try_initRVvol=try_initRVvol+tune_initRVvol*adj_try_initRVvol
+            last_currentinitRVvol=currentinitRVvol
     if abs(cir_results[0,-1]/cir_results[0,1]-1)>0.05:
         logger.warning("Circuit might not converged, last cycle: start EDvol="+repr(cir_results[0,1])+', end EDvol='+repr(cir_results[0,-1]))
     return (try_initLVvol,adj_try_initLVvol)

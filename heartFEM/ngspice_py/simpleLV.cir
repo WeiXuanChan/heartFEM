@@ -1,6 +1,6 @@
-*version 3.6.0
-*units in Pressure:mmHg, Volume:mL, time:s
-
+*version 4.3.0
+*units in Pressure:mmHg, Volume:mL, time:ms
+*chamber source mode: 0=pressure pulse with capacitor, 1=fourier current, 2=timebased, 3=2d table,4=2dtable with trackphase, 5=3d table ,6=3dtable with trackphase
 .title simple LV circuit
 
 .PARAM PI = 3.14159265359
@@ -56,9 +56,9 @@ alau0 gnd lavol %v(lagenerator0) lautabmod0
 alau1 lavol laphasetime %v(lagenerator1) lautabmod
 .model lautabmod table2d (offset=0.0 gain=1 order=3 file="<<lautablefile>>")
 .else
-alau0 ravol lavol %v(lagenerator0) lautabmod0
+alau0 lvvol lavol %v(lagenerator0) lautabmod0
 .model lautabmod0 table2d (offset=0.0 gain=1 order=3 file="<<lautablebasefile>>")
-alau1 lavol laphasetime ravol %v(lagenerator1) lautabmod
+alau1 lavol laphasetime lvvol %v(lagenerator1) lautabmod
 .model lautabmod table3d (offset=0.0 gain=1 order=3 file="<<lautablefile>>")
 .endif
 .if (lasourcemode == 3 || lasourcemode == 5)
@@ -75,7 +75,7 @@ alapressgrad  lacurrentphase gnd latrcap
 alatr gnd lavol %v(latr) lautabtrmod
 .model lautabtrmod table2d (offset=0.0 gain=1 order=3 file="<<latrtablefile>>")
 .else
-alatr ravol lavol %v(latr) lautabtrmod
+alatr lvvol lavol %v(latr) lautabtrmod
 .model lautabtrmod table2d (offset=0.0 gain=1 order=3 file="<<latrtablefile>>")
 .endif
 Blaphase laphase gnd V = max(0,min(1,v(lacurrentphase)))
@@ -108,9 +108,9 @@ alvu0 gnd lvvol %v(lvgenerator0) lvutabmod0
 alvu1 lvvol lvphasetime %v(lvgenerator1) lvutabmod
 .model lvutabmod table2d (offset=0.0 gain=1 order=3 file="<<lvutablefile>>")
 .else
-alvu0 rvvol lvvol %v(lvgenerator0) lvutabmod0
+alvu0 lavol lvvol %v(lvgenerator0) lvutabmod0
 .model lvutabmod0 table2d (offset=0.0 gain=1 order=3 file="<<lvutablebasefile>>")
-alvu1 lvvol lvphasetime rvvol %v(lvgenerator1) lvutabmod
+alvu1 lvvol lvphasetime lavol %v(lvgenerator1) lvutabmod
 .model lvutabmod table3d (offset=0.0 gain=1 order=3 file="<<lvutablefile>>")
 .endif
 .if (lvsourcemode == 3 || lvsourcemode == 5)
@@ -136,8 +136,6 @@ Btime2 lvphasetime gnd V =  (v(timecyclic) > v(lvactivepeaktime)) ? (v(lvactivep
 .endif
 .endif
 
-Etime timecyclic gnd vol = 'manmod(TIME)'
-
 Blavol  lavol gnd I = -i(Vlaprobe) 
 alavolconvert  lavol gnd lavolconvertcap
 .model lavolconvertcap capacitor (c=1 ic=<<lainitvol>>)
@@ -146,28 +144,23 @@ Blvvol  lvvol gnd I = -i(Vlvprobe)
 alvvolconvert  lvvol gnd lvvolconvertcap
 .model lvvolconvertcap capacitor (c=1 ic=<<lvinitvol>>)
 
-Blvu   lvgnd   lvgnd2  <<lvinputvar>> = v(lvgenerator)
-Vlvu   lvgnd2   gnd  dc 0
-
-Elau   lagnd2  gnd     vol = 'cossq( TIME ,<<laamp>>,<<lapeaktime>>,<<lawidth>>)'
-
 Vlalavalv  lavalvp1 lavalvp2 dc 0
-Blalavalv  lavalvp2 lavalv V=' <<lalavalvk>> * ( i(Vlalavalv) ^2 )^( <<lalavalvb>> / 2) * sgn( i(Vlalavalv) ) '
+Elalavalvk lalavalvk gnd vol = ' <<lalavalvk>> '
+Blalavalv  lavalvp2 lavalv V=' v(lalavalvk) * ( i(Vlalavalv) ^2 )^( <<lalavalvb>> / 2) * sgn( i(Vlalavalv) ) '
 Vlvlvvalv  lv  lvvalvp1 dc 0
-Blvlvvalv  lvvalvp1 lvvalvp2 V=' <<lvlvvalvk>> * ( i(Vlvlvvalv) ^2 )^( <<lvlvvalvb>> / 2) * sgn( i(Vlvlvvalv) ) '
+Elvlvvalvk lvlvvalvk gnd vol = ' <<lvlvvalvk>> '
+Blvlvvalv  lvvalvp1 lvvalvp2 V=' v(lvlvvalvk) * ( i(Vlvlvvalv) ^2 )^( <<lvlvvalvb>> / 2) * sgn( i(Vlvlvvalv) ) '
 
 ala   lavalv   lv   valve
 alv   lvvalvp2 lvvalv   valve
-.if (lvregurgitation > 0)
-Rlvregurgitation lv        lvregurp1      r = lvregurgitation
-Vlvregurgitation lvregurp1 lavalvp1       dc 0
-.elseif (lvregurgitationvalveratio > 0)
+
 Vlvregurgitation  lv          lvregurp1   dc 0
-Blvregurgitation  lvregurp1   lvregurp2   V=' <<lalavalvk>> / lvregurgitationvalveratio * ( i(Vlvregurgitation) ^2 )^( <<lalavalvb>> / 2) * sgn( i(Vlvregurgitation) ) '
+Blvregurgitation  lvregurp1   lvregurp2   V=' v(lalavalvk) / max(v(lvregurgitationvalveratio),1n) * ( i(Vlvregurgitation) ^2 )^( <<lalavalvb>> / 2) * sgn( i(Vlvregurgitation) ) '
 alvregurgitation  lvregurp2   lavalvp1    valve
-.else
-Vlvregurgitation  lvregurp1   gnd         dc 0
-.endif
+
+Vaaregurgitation  lvvalv      aaregurp1   dc 0
+Baaregurgitation  aaregurp1   aaregurp2   V=' v(lvlvvalvk) / max(v(aaregurgitationvalveratio),1n) * ( i(Vaaregurgitation) ^2 )^( <<lvlvvalvb>> / 2) * sgn( i(Vaaregurgitation) ) '
+aaaregurgitation  aaregurp2   lv    valve
 
 Cart   art    gnd    <<artc>>
 Cven   ven    gnd    <<venc>>
@@ -180,7 +173,7 @@ Xvenla    ven   la      vein  rval=<<venlar>>     lval=<<venlal>>
 
 .options savecurrents
 
-.ic v(la)= <<vla0>> v(ra)= <<vra0>>
+.ic v(la)= <<vla0>>
 .tran <<stepTime>> <<stopTime>>
 *.print tran v(lv) i(Vlvprobe)
 
@@ -190,6 +183,6 @@ set controlswait
 set filetype=ascii
 set wr_vecnames
 run
-wrdata <<outfile>> v(lv) v(lvvol) v(la) v(rv) v(ra) v(pa1) v(aa) v(lavalvp1) v(lvvalv) i(Vlvprobe) v(phasetime) v(rvvol) i(Vlalavalv) i(Vlvlvvalv) i(Vlvregurgitation) 
+wrdata <<outfile>> v(lv) v(lvvol) v(la) v(lavalvp1) v(lvvalv) i(Vlvprobe) v(lvphasetime) i(Vlalavalv) i(Vlvlvvalv) i(Vlvregurgitation) 
 .endc 
 .end

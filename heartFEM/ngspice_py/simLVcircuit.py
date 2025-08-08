@@ -15,9 +15,11 @@ History:
   Author: w.x.chan@gmail.com         09Nov2021           - v4.0.0
                                                               -change time unit to ms
                                                               -added flexible cavity source
+  Author: w.x.chan@gmail.com         13Jan2023           - v4.0.1
+                                                              -typo: for 'time based' in sourcefileDict['Windkessel '+side.upper()+' source function'] change np.array to np.loadtxt
 '''
 ########################################################################
-_version='4.0.0'
+_version='4.0.1'
 import logging
 logger = logging.getLogger(__name__)
 
@@ -25,11 +27,10 @@ import sys
 import vtk
 import os
 import inspect
-from heartFEM import ngspice_py
+from . import ngspice_util
 import numpy as np
 from scipy import interpolate
 ########################################################################
-
 
 def simLVcircuit(casename,stopTime,sourcefileDict,initLAvol=0,initRAvol=0,initLVvol=0,initRVvol=0,vla0=None,vra0=None,init_file=None,init_time=None,additionalVarDict=None,timetopeak_from_to=None,verbose=True):
 
@@ -46,14 +47,10 @@ def simLVcircuit(casename,stopTime,sourcefileDict,initLAvol=0,initRAvol=0,initLV
     lvufilename={'la':'laufile.txt','ra':'raufile.txt','lv':'lvufile.txt','rv':'rvufile.txt'}
     for side in ['la','ra','lv','rv']:
         if 'time based' in sourcefileDict['Windkessel '+side.upper()+' source function']:
-            if os.path.isfile(sourcefileDict['Windkessel '+side.upper()+' source file']):
-                case_dir,lvufilename[side] = os.path.split(sourcefileDict['Windkessel '+side.upper()+' source file'])
-            else:
-                data=np.array(sourcefileDict['Windkessel '+side.upper()+' source file'])
-                case_dir=os.getcwd()
-                lvufilename[side]=side+'ufile.txt'
-                lvufile=os.getcwd()+'/'+lvufilename[side]
-                np.savetxt(lvufile,data)
+            data=np.loadtxt(sourcefileDict['Windkessel '+side.upper()+' source file'])
+            case_dir=os.getcwd()
+            lvufile=os.getcwd()+'/'+lvufilename[side]
+            np.savetxt(lvufile,data)
                 
             if init_file is not None and init_time is not None:
                 data=np.loadtxt(sourcefileDict['Windkessel '+side.upper()+' source file'])
@@ -77,8 +74,7 @@ def simLVcircuit(casename,stopTime,sourcefileDict,initLAvol=0,initRAvol=0,initLV
                         vra0=np.loadtxt(os.getcwd()+'/temp_'+lvufilename[side])[0,1]*1.01
                     else:
                         vra0=0.
-        elif '2D table' in sourcefileDict['Windkessel '+side.upper()+' source function']:
-            case_dir,lvufilename[side] = os.path.split(sourcefileDict['Windkessel '+side.upper()+' source file'])
+        elif ' table' in sourcefileDict['Windkessel '+side.upper()+' source function']:
             cmd = "cp "+sourcefileDict['Windkessel '+side.upper()+' source file']+" " +'./temp_'+lvufilename[side]
             os.system(cmd)
             if timetopeak_from_to is not None:
@@ -105,18 +101,37 @@ def simLVcircuit(casename,stopTime,sourcefileDict,initLAvol=0,initRAvol=0,initLV
             os.system(cmd)
             cmd = "sed -i.bak s/'<<lvutablebasefile>>'/'temp_" +lvufilename[side][:-4]+'base.txt' + "'/g " + cirtempfilename
             os.system(cmd)
-            if side=='lv':
+            if side=='lv' or (side=='rv' and os.path.isfile(os.getcwd()+'/temp_'+lvufilename['rv'][:-4]+'base.txt')):
                 if vla0 is None or vra0 is None:
                         data0=np.loadtxt(os.getcwd()+'/temp_'+lvufilename[side][:-4]+'base.txt',skiprows=10)
                         x0=np.loadtxt(os.getcwd()+'/temp_'+lvufilename[side][:-4]+'base.txt',skiprows=8,max_rows=1)
-                        
-                        datafunc = interpolate.splrep(x0,data0[:,0])
-                        temp_vlv = interpolate.splev(np.array([initLVvol]), datafunc)[0]
-                        logger.info('LV pressure start is '+repr(temp_vlv))
-                        if vla0 is None:
-                            vla0 = temp_vlv*0.95
+                        if data0.shape[1]<=3:
+                            print(x0.shape)
+                            print(data0.shape)
+                            datafunc = interpolate.splrep(x0,data0[:,0])
+                            temp_vlv = interpolate.splev(np.array([initLVvol]), datafunc)[0]
+                            logger.info('LV pressure start is '+repr(temp_vlv))
+                        else:
+                            y0=np.loadtxt(os.getcwd()+'/temp_'+lvufilename[side][:-4]+'base.txt',skiprows=6,max_rows=1)
+                            xx, yy = np.meshgrid(x0, y0)
+                            datafunc = interpolate.interp2d(y0, x0, data0, kind='cubic')
+                            temp_vlv = datafunc(np.array([initRVvol]),np.array([initLVvol]))[0]
+                        if vla0 is None and side=='lv':
+                            if temp_vlv<0:
+                                vla0 = temp_vlv*1.05
+                            else:
+                                vla0 = temp_vlv*0.95
                         if vra0 is None:
-                            vra0 = temp_vlv*1.05
+                            if (side=='rv' and os.path.isfile(os.getcwd()+'/temp_'+lvufilename['rv'][:-4]+'base.txt')):
+                                if temp_vlv<0:
+                                    vra0 = temp_vlv*1.05
+                                else:
+                                    vra0 = temp_vlv*0.95
+                            elif side=='lv' and not(os.path.isfile(os.getcwd()+'/temp_'+lvufilename['rv'][:-4]+'base.txt')):
+                                if temp_vlv<0:
+                                    vra0 = temp_vlv*0.95
+                                else:
+                                    vra0 = temp_vlv*1.05
             if 'tracking of relaxation phase' in sourcefileDict['Windkessel '+side.upper()+' source function']:
                 cmd = "cp "+sourcefileDict['Windkessel '+side.upper()+' source file'][:-4]+'tr.txt'+" " +'./temp_'+lvufilename[side][:-4]+'tr.txt'
                 os.system(cmd)
@@ -144,9 +159,16 @@ def simLVcircuit(casename,stopTime,sourcefileDict,initLAvol=0,initRAvol=0,initLV
             os.system(cmd)
     cmd = "ngspice -o "+cirlogfilename+" -b " + cirtempfilename
     os.system(cmd)
+    with open(cirlogfilename,'r') as f:
+        lines=f.readlines()
+    for n in [-1,-2,-3]:
+        if 'aborted' in lines[n]:
+            raise Exception('NGspice simulation error.')
+            
     
     cmd = "mv " +'./'+outfilename+'circuit.txt '+case_dir+'/'+'circuit_results.txt'
     os.system(cmd)
+    
     for side in ['la','ra','lv','rv']:
         cmd = "rm "+'./temp_'+lvufilename[side]
         os.system(cmd)
@@ -156,7 +178,7 @@ def simLVcircuit(casename,stopTime,sourcefileDict,initLAvol=0,initRAvol=0,initLV
             if 'tracking of relaxation phase' in sourcefileDict['Windkessel '+side.upper()+' source function']:
                 cmd = "rm "+'./temp_'+lvufilename[side][:-4]+'tr.txt'
                 os.system(cmd)
-
+    
 def simcirFile(cirtempfilename,sourcefileDict,BCL=None,toFolder=None,init_file=None,init_time=None,timetopeak_from_to=None,additionalVarDict=None,editCircuit=None,identifyName=None):
     if identifyName is None:
         identifyName='newcircuit'
@@ -200,7 +222,7 @@ def simcirFile(cirtempfilename,sourcefileDict,BCL=None,toFolder=None,init_file=N
                 os.system(cmd)
             cmd = "sed -i.bak s/'<<lvufile>>'/'temp_" +lvufilename[side] + "'/g " + cirtempfilename
             os.system(cmd)
-        elif '2D table' in sourcefileDict['Windkessel '+side.upper()+' source function']:
+        elif ' table' in sourcefileDict['Windkessel '+side.upper()+' source function']:
             case_dir,lvufilename[side] = os.path.split(sourcefileDict['Windkessel '+side.upper()+' source file'])
             cmd = "cp "+sourcefileDict['Windkessel '+side.upper()+' source file']+" " +'./temp_'+lvufilename[side]
             os.system(cmd)
@@ -238,14 +260,16 @@ def simcirFile(cirtempfilename,sourcefileDict,BCL=None,toFolder=None,init_file=N
     cmd = "mv " +'./'+outfilename+' '+savecirresultfile
     os.system(cmd)
     if BCL is not None:
-        ngspice_py.getLastcycleCircuitResults(BCL,folder,savecirresultfilename[:-4]+'_circuit_results')
+        ngspice_util.getLastcycleCircuitResults(BCL,folder,savecirresultfilename[:-4]+'_circuit_results')
+    '''
     for side in ['la','ra','lv','rv']:
         cmd = "rm "+'./temp_'+lvufilename[side]
         os.system(cmd)
-        if '2D table' in sourcefileDict['Windkessel '+side.upper()+' source function']:
+        if ' table' in sourcefileDict['Windkessel '+side.upper()+' source function']:
             cmd = "rm "+'./temp_'+lvufilename[side][:-4]+'base.txt'
             os.system(cmd)
             if 'tracking of relaxation phase' in sourcefileDict['Windkessel '+side.upper()+' source function']:
                 cmd = "rm "+'./temp_'+lvufilename[side][:-4]+'tr.txt'
                 os.system(cmd)
+    '''
         
