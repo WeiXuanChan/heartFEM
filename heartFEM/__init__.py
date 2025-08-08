@@ -2952,7 +2952,7 @@ class fenicsResultWriter:
             self.tag=[np.zeros((0,len(tag))),tag]
         else:
             self.tag=None
-        if "displacement" in outputResultList:
+        if "displacement" in outputResultList or "deformation" in outputResultList:
             os.makedirs(self.savePath+"/deformation",exist_ok=True)
             self.displacementFile = fenics.File(self.savePath+"/deformation/u_disp.pvd")
         if "deformationgradienttensor" in outputResultList:
