@@ -9,7 +9,8 @@ class NSolver(object):
 
         self.parameters = params
         self.isfirstiteration = 0
-        self.default_parameters={"rel_tol": 1e-6,
+        self.default_parameters={"Type":0,
+                                 "rel_tol": 1e-6,
                                 "abs_tol": 1e-6,
                                 "max_iter": 5}
         for key in self.default_parameters:
@@ -29,7 +30,7 @@ class NSolver(object):
         Ftotal = self.parameters["F"]
         w = self.parameters["w"]
         bcs = self.parameters["boundary_conditions"]
-        solvertype = self.parameters["Type"]
+        solvertype = self.default_parameters["Type"]
 
         mesh = self.parameters["mesh"]
         comm = w.function_space().mesh().mpi_comm()
