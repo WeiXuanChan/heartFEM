@@ -36,6 +36,9 @@ class SimpleActiveMaterial(object):
     def PK1Stress(self):
         Ca0 = self.default_parameters["Ca0"]
         Tmax = self.parameters["T0"]
+        if self.parameters["activefiberstrength"] is not None:
+            f0 = self.parameters["fiber"]
+            Tmax = Tmax*self.parameters["activefiberstrength"].sub(0)
         Ct = self.Ct()
         ECa = self.ECa()
         Pact = (Tmax*Ct*Ca0**2.0)/(Ca0**2.0 + ECa**2.0)
@@ -83,6 +86,12 @@ class SimpleActiveMaterial(object):
         b = self.default_parameters["b"]
         m = self.default_parameters["m"]
         t_a = self.parameters["t_a"]
+        BCL=self.parameters['BCL']
+        if self.parameters["activefiberdelay"] is not None:
+            t_a = t_a-self.parameters["activefiberdelay"].sub(0)
+            adjust = conditional(lt(t_a,0.), BCL, 0.0)
+            adjust2 = conditional(le(BCL,t_a), -BCL, 0.0)
+            t_a = t_a + adjust + adjust2
         lr = self.default_parameters["lr"]
         
         
@@ -93,7 +102,7 @@ class SimpleActiveMaterial(object):
         
         tr = self.tr()
         xp1 = conditional(lt(t_a,t0), 1.0, 0.0)
-        w1 = xp1*pi*t_a/t0
+        w1 = xp1*pi*t_a/t0*conditional(lt(t_a,0), 0., 1.0)
         xp2 = conditional(le(t0,t_a), 1.0, 0.0)
         
         if self.trackphase:
@@ -139,3 +148,8 @@ class SimpleActiveMaterial(object):
         print( sigma_fiber_LV)
 
         return sigma_fiber_LV
+
+class SimpleActiveMaterial_AV(SimpleActiveMaterial):
+    def __init__(self, params,trackphase=False):
+        super().__init__(params,trackphase=trackphase)
+    

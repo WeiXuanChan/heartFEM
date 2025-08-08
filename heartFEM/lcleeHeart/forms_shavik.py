@@ -7,7 +7,8 @@ from ufl import i
 from ufl import j
 #from mpi4py import MPI					 
 import sys
-
+import logging
+logger = logging.getLogger('forms_shavik')
 class Forms(object):
 
 	def __init__(self, params):		
@@ -48,7 +49,6 @@ class Forms(object):
 		ds = dolfin.ds(subdomain_data=self.parameters["facetboundaries"])
 			
 		F = self.Fmat()
-			
 		vol_form = -Constant(1.0/3.0) * inner(det(F)*dot(inv(F).T, N), X + u)*ds(self.parameters["endoid"])
 			
 		return assemble(vol_form)
@@ -92,8 +92,9 @@ class Forms(object):
 		s0 = self.parameters["sheet"]
 		n0 = self.parameters["sheet-normal"]
 		p = self.parameters["pressure_variable"]
-        
 		Cstrain=self.parameters["StrainEnergyDensityFunction_Coef"]
+		if self.parameters["cstrainfactor"] is not None:
+		    Cstrain=Cstrain*self.parameters["cstrainfactor"].sub(0)
 		Cff=self.parameters["StrainEnergyDensityFunction_Cff"]
 		Css=self.parameters["StrainEnergyDensityFunction_Css"]
 		Cnn=self.parameters["StrainEnergyDensityFunction_Cnn"]
@@ -134,6 +135,8 @@ class Forms(object):
 	    p = self.parameters["pressure_variable"]
         
 	    Cstrain=self.parameters["StrainEnergyDensityFunction_Coef"]
+	    if self.parameters["cstrainfactor"] is not None:
+		    Cstrain=Cstrain*self.parameters["cstrainfactor"].sub(0)
 	    Cff=self.parameters["StrainEnergyDensityFunction_Cff"]
 	    Css=self.parameters["StrainEnergyDensityFunction_Css"]
 	    Cnn=self.parameters["StrainEnergyDensityFunction_Cnn"]
@@ -221,6 +224,8 @@ class Forms(object):
 		p = self.parameters["pressure_variable"]
 
 		Cstrain=self.parameters["StrainEnergyDensityFunction_Coef"]
+		if self.parameters["cstrainfactor"] is not None:
+		    Cstrain=Cstrain*self.parameters["cstrainfactor"].sub(0)
 
 		F = dolfin.variable(F)
 		J = det(F)
@@ -289,6 +294,225 @@ class Forms(object):
 #		   return  Smatout
 
 
+class Forms_AV(Forms):
+    def __init__(self, params):
+        super().__init__(params)
+    # def V0constrainedE(self,inverse=False,addstr=''):
+    #     mesh = self.parameters["mesh"]
+    #     u = self.parameters["displacement_variable"]
+    #     ds = dolfin.ds(subdomain_data=self.parameters["facetboundaries"])
+    #     dsendo = ds(self.parameters["endo"+addstr+"id"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"])
+    #     dsendo2 = ds(self.parameters["endo"+addstr+"AVJid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"])
+        
+    #     pendo = self.parameters["vol"+addstr+"const_variable"] 
+    #     V0= self.parameters["constrained_vol"+addstr] 
+
+    #     X = SpatialCoordinate(mesh)
+    #     x = u + X
 
 
+    #     F = self.Fmat()
+    #     N = self.parameters["facet_normal"]
+    #     n = cofac(F)*N
+        
+    #     area = assemble(Constant(1.0) * dsendo+Constant(1.0) * dsendo2)
+    #     if inverse:
+    #         V_u = - Constant(0.0/3.0) * inner(x, n)
+    #         Wvol = (Constant(0.0/area) * pendo  * V0 * dsendo) - (pendo * V_u *dsendo)
+    #     else:
+    #         logging.debug("constrained_vol"+addstr+", V0 : "+repr(V0)+', cavityvol : '+repr(self.cavityvol(addstr)))
+    #         #V_u = - Constant(1.0/3.0) * inner(x, n)##trying same formulation as self.cavityvol !!debug
+    #         V_u = - Constant(1.0/3.0) *inner(det(F)*dot(inv(F).T, N),x)
+    #         Wvol = (Constant(1.0/area) * pendo  * V0 * dsendo)+(Constant(1.0/area) * pendo  * V0 * dsendo2) - (pendo * V_u *dsendo) - (pendo * V_u *dsendo2)
+    #     return Wvol
+    def V0constrainedE(self,inverse=False):
+        mesh = self.parameters["mesh"]
+        u = self.parameters["displacement_variable"]
+        ds = dolfin.ds(subdomain_data=self.parameters["facetboundaries"])
+        dsAtrendo = ds(self.parameters["endoAtrid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"])
+        dsAtrendo2 = ds(self.parameters["endoAtrAVJid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"])
+        dsVenendo = ds(self.parameters["endoVenid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"])
+        dsVenendo2 = ds(self.parameters["endoVenAVJid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"])
+        
+        pendoAtr = self.parameters["volAtrconst_variable"] 
+        V0Atr= self.parameters["constrained_volAtr"] 
+        pendoVen = self.parameters["volVenconst_variable"] 
+        V0Ven= self.parameters["constrained_volVen"] 
+        
+        AVJ_control= self.parameters["AVJ_control"]
+        X = SpatialCoordinate(mesh)
+        x = u + X
+        
 
+        F = self.Fmat()
+        N = self.parameters["facet_normal"]
+        n = cofac(F)*N
+        
+        
+        if inverse:
+            V_u = - Constant(0.0/3.0) * inner(x, n)
+            Wvol = (Constant(0.0/area) * pendo  * V0 * dsendo) - (pendo * V_u *dsendo)
+        else:
+            
+            logging.debug("constrained_volAtr, V0 : "+repr(V0Atr)+', cavityvol : '+repr(self.cavityvol('Atr')))
+            logging.debug("constrained_volVen, V0 : "+repr(V0Ven)+', cavityvol : '+repr(self.cavityvol('Ven')))
+            
+            ##trying same formulation as self.cavityvol !!debug
+            #V_u = - Constant(1.0/3.0) *inner(det(F)*dot(inv(F).T, N),x)
+            if AVJ_control==3:
+                pendoAVJ=self.parameters["volAVJconst_variable"]
+                V0AVJ= self.parameters["constrained_volAVJ"] 
+                c11= self.parameters["c11"] 
+                V_u = - Constant(1.0/3.0) * inner(x, n)
+                areaAtr = assemble(Constant(1.0) * dsAtrendo)
+                areaVen = assemble(Constant(1.0) * dsVenendo)
+                areaAVJ_Atr = assemble(Constant(1.0) * dsAtrendo2)
+                areaAVJ_Ven = assemble(Constant(1.0) * dsVenendo2)
+                V_u_atr = - Constant(1.0/3.0) * (inner(x, n)-Constant(2.0/areaAVJ_Atr)*(c11[5]*n[0]+c11[6]*n[1]+c11[7]*n[2]))
+                V_u_ven = - Constant(1.0/3.0) * (inner(x, n)-Constant(2.0/areaAVJ_Ven)*(c11[8]*n[0]+c11[9]*n[1]+c11[10]*n[2]))
+                V_u_AVJatr = - Constant(1.0/2.0) * (inner(x, n)-Constant(1.0/areaAVJ_Atr)*(c11[5]*n[0]+c11[6]*n[1]+c11[7]*n[2]))
+                V_u_AVJven = - Constant(1.0/2.0) * (inner(x, n)-Constant(1.0/areaAVJ_Ven)*(c11[8]*n[0]+c11[9]*n[1]+c11[10]*n[2]))
+                WvolAtr = (Constant(1.0/areaAtr) * pendoAtr  * V0Atr * dsAtrendo) - (pendoAtr * V_u_atr *dsAtrendo)
+                WvolVen = (Constant(1.0/areaVen) * pendoVen  * V0Ven * dsVenendo) - (pendoVen * V_u_ven *dsVenendo) 
+                WvolAVJ = (Constant(1.0/(areaAVJ_Atr+areaAVJ_Ven)) * pendoAVJ  * V0AVJ * dsAtrendo2)+(Constant(1.0/(areaAVJ_Atr+areaAVJ_Ven)) * pendoAVJ  * V0AVJ * dsVenendo2) - (pendoAVJ * V_u_AVJatr *dsAtrendo2) - (pendoAVJ * V_u_AVJven *dsVenendo2)
+                Wvol=WvolAtr+WvolVen+WvolAVJ
+            elif AVJ_control==2:
+                pendoAVJ=self.parameters["volAVJconst_variable"]
+                V0AVJ= self.parameters["constrained_volAVJ"] 
+                
+                V_u = - Constant(1.0/3.0) * inner(x, n)
+                areaAtr = assemble(Constant(1.0) * dsAtrendo)
+                areaVen = assemble(Constant(1.0) * dsVenendo)
+                areaAVJ_Atr = assemble(Constant(1.0) * dsAtrendo2)
+                areaAVJ_Ven = assemble(Constant(1.0) * dsVenendo2)
+                AVJ_atr_centroid0=Constant(1.0/areaAVJ_Atr)*assemble(x[0]*dsAtrendo2)
+                AVJ_atr_centroid1=Constant(1.0/areaAVJ_Atr)*assemble(x[1]*dsAtrendo2)
+                AVJ_atr_centroid2=Constant(1.0/areaAVJ_Atr)*assemble(x[2]*dsAtrendo2)
+                AVJ_ven_centroid0=Constant(1.0/areaAVJ_Ven)*assemble(x[0]*dsVenendo2)
+                AVJ_ven_centroid1=Constant(1.0/areaAVJ_Ven)*assemble(x[1]*dsVenendo2)
+                AVJ_ven_centroid2=Constant(1.0/areaAVJ_Ven)*assemble(x[2]*dsVenendo2)
+                V_u_atr = - Constant(1.0/3.0) * (inner(x, n)-Constant(2.0)*(AVJ_atr_centroid0*n[0]+AVJ_atr_centroid1*n[1]+AVJ_atr_centroid2*n[2]))
+                V_u_ven = - Constant(1.0/3.0) * (inner(x, n)-Constant(2.0)*(AVJ_ven_centroid0*n[0]+AVJ_ven_centroid1*n[1]+AVJ_ven_centroid2*n[2]))
+                V_u_AVJatr = - Constant(1.0/2.0) * (inner(x, n)-(AVJ_atr_centroid0*n[0]+AVJ_atr_centroid1*n[1]+AVJ_atr_centroid2*n[2]))
+                V_u_AVJven = - Constant(1.0/2.0) * (inner(x, n)-(AVJ_ven_centroid0*n[0]+AVJ_ven_centroid1*n[1]+AVJ_ven_centroid2*n[2]))
+                WvolAtr = (Constant(1.0/areaAtr) * pendoAtr  * V0Atr * dsAtrendo) - (pendoAtr * V_u_atr *dsAtrendo)
+                WvolVen = (Constant(1.0/areaVen) * pendoVen  * V0Ven * dsVenendo) - (pendoVen * V_u_ven *dsVenendo) 
+                WvolAVJ = (Constant(1.0/(areaAVJ_Atr+areaAVJ_Ven)) * pendoAVJ  * V0AVJ * dsAtrendo2)+(Constant(1.0/(areaAVJ_Atr+areaAVJ_Ven)) * pendoAVJ  * V0AVJ * dsVenendo2) - (pendoAVJ * V_u_AVJatr *dsAtrendo2) - (pendoAVJ * V_u_AVJven *dsVenendo2)
+                Wvol=WvolAtr+WvolVen+WvolAVJ
+            elif AVJ_control:
+                pendoAVJ=self.parameters["volAVJconst_variable"]
+                V0AVJ= self.parameters["constrained_volAVJ"] 
+                V_u = - Constant(1.0/3.0) * inner(x, n)
+                areaAtr = assemble(Constant(1.0) * dsAtrendo)
+                areaVen = assemble(Constant(1.0) * dsVenendo)
+                areaAVJ_Atr = assemble(Constant(1.0) * dsAtrendo2)
+                areaAVJ_Ven = assemble(Constant(1.0) * dsVenendo2)
+                WvolAtr = (Constant(1.0/areaAtr) * pendoAtr  * V0Atr * dsAtrendo) - (pendoAtr * V_u *dsAtrendo)
+                WvolVen = (Constant(1.0/areaVen) * pendoVen  * V0Ven * dsVenendo) - (pendoVen * V_u *dsVenendo) 
+                WvolAVJ = (Constant(1.0/(areaAVJ_Atr+areaAVJ_Ven)) * pendoAVJ  * V0AVJ * dsAtrendo2)+(Constant(1.0/(areaAVJ_Atr+areaAVJ_Ven)) * pendoAVJ  * V0AVJ * dsVenendo2) - (pendoAVJ * V_u *dsAtrendo2) - (pendoAVJ * V_u *dsVenendo2)
+                Wvol=WvolAtr+WvolVen+WvolAVJ
+            else:
+                V_u = - Constant(1.0/3.0) * inner(x, n)
+                areaAtr = assemble(Constant(1.0) * dsAtrendo+Constant(1.0) * dsAtrendo2)
+                areaVen = assemble(Constant(1.0) * dsVenendo+Constant(1.0) * dsVenendo2)
+                WvolAtr = (Constant(1.0/areaAtr) * pendoAtr  * V0Atr * dsAtrendo)+(Constant(1.0/areaAtr) * pendoAtr  * V0Atr * dsAtrendo2) - (pendoAtr * V_u *dsAtrendo) - (pendoAtr * V_u *dsAtrendo2)
+                WvolVen = (Constant(1.0/areaVen) * pendoVen  * V0Ven * dsVenendo)+(Constant(1.0/areaVen) * pendoVen  * V0Ven * dsVenendo2) - (pendoVen * V_u *dsVenendo) - (pendoVen * V_u *dsVenendo2)
+                Wvol=WvolAtr+WvolVen
+        return Wvol
+    def cavityvol(self,addstr=''):
+        
+        u = self.parameters["displacement_variable"]
+        N = self.parameters["facet_normal"]
+        mesh = self.parameters["mesh"]
+        X = SpatialCoordinate(mesh)
+        ds = dolfin.ds(subdomain_data=self.parameters["facetboundaries"])
+
+        F = self.Fmat()
+        n=det(F)*dot(inv(F).T, N)
+        x=X + u
+        if self.parameters["AVJ_control"]==3:
+            c11= self.parameters["c11"] 
+            areaAVJ = assemble(Constant(1.0) * ds(self.parameters["endo"+addstr+"AVJid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"]))
+            if addstr=='Atr':
+                centroid=as_vector([c11[5],c11[6],c11[7]])
+            elif addstr=='Ven':
+                centroid=as_vector([c11[8],c11[9],c11[10]])
+            vol_form = -Constant(1.0/3.0) * (inner(n, x)-Constant(2.0/areaAVJ)*inner(centroid,n))*ds(self.parameters["endo"+addstr+"id"])
+        elif self.parameters["AVJ_control"]==2:
+            areaAVJ = assemble(Constant(1.0) * ds(self.parameters["endo"+addstr+"AVJid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"]))
+            AVJ_centroid0=Constant(1.0/areaAVJ)*assemble(x[0]*ds(self.parameters["endo"+addstr+"AVJid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"]))
+            AVJ_centroid1=Constant(1.0/areaAVJ)*assemble(x[1]*ds(self.parameters["endo"+addstr+"AVJid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"]))
+            AVJ_centroid2=Constant(1.0/areaAVJ)*assemble(x[2]*ds(self.parameters["endo"+addstr+"AVJid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"]))
+            vol_form = -Constant(1.0/3.0) * (inner(n, x)-Constant(2.0)*(AVJ_centroid0*n[0]+AVJ_centroid1*n[1]+AVJ_centroid2*n[2]))*ds(self.parameters["endo"+addstr+"id"])
+        elif self.parameters["AVJ_control"]:
+            vol_form = -Constant(1.0/3.0) * inner(n, x)*ds(self.parameters["endo"+addstr+"id"])
+        else:
+            vol_form =-Constant(1.0/3.0) * inner(n, x)*ds(self.parameters["endo"+addstr+"id"])-Constant(1.0/3.0) * inner(n,x)*ds(self.parameters["endo"+addstr+"AVJid"])
+        return assemble(vol_form)
+    
+    def avjvol(self):
+        
+        u = self.parameters["displacement_variable"]
+        N = self.parameters["facet_normal"]
+        mesh = self.parameters["mesh"]
+        X = SpatialCoordinate(mesh)
+        ds = dolfin.ds(subdomain_data=self.parameters["facetboundaries"])
+			
+        F = self.Fmat()
+        n=det(F)*dot(inv(F).T, N)
+        x=X + u
+        if self.parameters["AVJ_control"]==3:
+            c11= self.parameters["c11"] 
+            areaAVJ_Atr = assemble(Constant(1.0) * ds(self.parameters["endoAtrAVJid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"]))
+            areaAVJ_Ven = assemble(Constant(1.0) * ds(self.parameters["endoVenAVJid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"]))
+            vol_form = -Constant(1.0/2.0) * (inner(n, x)-Constant(1.0/areaAVJ_Atr)*(c11[5]*n[0]+c11[6]*n[1]+c11[7]*n[2]))*ds(self.parameters["endoAtrAVJid"])
+            vol_form2 = -Constant(1.0/2.0) * (inner(n, x)-Constant(1.0/areaAVJ_Ven)*(c11[8]*n[0]+c11[9]*n[1]+c11[10]*n[2]))*ds(self.parameters["endoVenAVJid"])
+        elif self.parameters["AVJ_control"]==2:
+            areaAVJ_Atr = assemble(Constant(1.0) * ds(self.parameters["endoAtrAVJid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"]))
+            areaAVJ_Ven = assemble(Constant(1.0) * ds(self.parameters["endoVenAVJid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"]))
+            AVJ_atr_centroid0=Constant(1.0/areaAVJ_Atr)*assemble(x[0]*ds(self.parameters["endoAtrAVJid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"]))
+            AVJ_atr_centroid1=Constant(1.0/areaAVJ_Atr)*assemble(x[1]*ds(self.parameters["endoAtrAVJid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"]))
+            AVJ_atr_centroid2=Constant(1.0/areaAVJ_Atr)*assemble(x[2]*ds(self.parameters["endoAtrAVJid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"]))
+            AVJ_ven_centroid0=Constant(1.0/areaAVJ_Ven)*assemble(x[0]*ds(self.parameters["endoVenAVJid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"]))
+            AVJ_ven_centroid1=Constant(1.0/areaAVJ_Ven)*assemble(x[1]*ds(self.parameters["endoVenAVJid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"]))
+            AVJ_ven_centroid2=Constant(1.0/areaAVJ_Ven)*assemble(x[2]*ds(self.parameters["endoVenAVJid"], domain = self.parameters["mesh"], subdomain_data = self.parameters["facetboundaries"]))
+            vol_form = -Constant(1.0/2.0) * (inner(n, x)-(AVJ_atr_centroid0*n[0]+AVJ_atr_centroid1*n[1]+AVJ_atr_centroid2*n[2]))*ds(self.parameters["endoAtrAVJid"])
+            vol_form2 = -Constant(1.0/2.0) * (inner(n, x)-(AVJ_ven_centroid0*n[0]+AVJ_ven_centroid1*n[1]+AVJ_ven_centroid2*n[2]))*ds(self.parameters["endoVenAVJid"])
+        else:
+            vol_form = -Constant(1.0/3.0) * inner(n, x)*ds(self.parameters["endoAtrAVJid"])
+            vol_form2 = -Constant(1.0/3.0) * inner(n, x)*ds(self.parameters["endoVenAVJid"])
+        return assemble(vol_form+vol_form2)
+    
+    def cavitypressure(self,addstr=''):
+        if addstr=='Atr':
+            idnum=2
+        elif addstr=='Ven':
+            idnum=3
+        elif addstr=='AVJ':
+            idnum=4
+        else:
+            raise Exception("Indicate Atr or Ven or AVJ for cavitypressure.")
+            
+        W = self.parameters["mixedfunctionspace"]
+        w = self.parameters["mixedfunction"]
+        mesh = self.parameters["mesh"]
+
+        comm = W.mesh().mpi_comm()
+        dofmap =  W.sub(idnum).dofmap()
+        val_dof = dofmap.cell_dofs(0)[0]
+
+			# the owner of the dof broadcasts the value
+        own_range = dofmap.ownership_range()
+	
+        try:
+            val_local = w.vector()[val_dof]				  
+        except IndexError:
+            val_local = 0.0
+
+
+        pressure = MPI.sum(comm, val_local)
+        return pressure
+    def currentFiberVector(self):
+        F = self.Fmat()
+        f0 = self.parameters["fiber"]
+        return dot(F, f0)
