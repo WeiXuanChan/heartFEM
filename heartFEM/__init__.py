@@ -3135,7 +3135,7 @@ class fenicsResultWriter:
                         if self.tag[1][n] in tag:
                             temp_tag_val[0,n]=tag[self.tag[1][n]]
                 self.tag[0]=np.concatenate((self.tag[0],temp_tag_val),axis=0)
-                np.savetxt(self.savePath+"/result_tags.txt",np.concatenate((np.arange(self.tag[0].shape[0]),self.tag[0]),axis=1),comments="#ID ",header=" ".join(self.tag[1]))
+                np.savetxt(self.savePath+"/result_tags.txt",np.concatenate((np.arange(self.tag[0].shape[0]).reshape((-1,1)),self.tag[0]),axis=1),comments="#ID ",header=" ".join(self.tag[1]))
 class tanh_limit:
     def __init__(self,low,high,inverse=False,log=0):
         self.log=log
